@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # cc-mode — Switch cc-kit statusLine display mode
 # Usage: cc-mode [single|wide|full]
-set -euo pipefail
+# See install.sh for why this is conditional.
+set -eu
+[ -n "${BASH_VERSION:-}" ] && set -o pipefail
 
-MODE_FILE="$HOME/projects/cc-kit/data/.display_mode"
+MODE_FILE="__CC_KIT_DIR__/data/.display_mode"
 mkdir -p "$(dirname "$MODE_FILE")"
 
 mode="${1:-}"

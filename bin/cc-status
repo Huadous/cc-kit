@@ -8,9 +8,11 @@
 #   cc-status --help
 #
 # Set default mode in settings.json statusLine command: "cc-status --wide"
-set -euo pipefail
+# See install.sh for why this is conditional.
+set -eu
+[ -n "${BASH_VERSION:-}" ] && set -o pipefail
 
-CC_KIT_DIR="$HOME/projects/cc-kit"
+CC_KIT_DIR="__CC_KIT_DIR__"
 source "$CC_KIT_DIR/modules/monitor.sh" 2>/dev/null || true
 
 # ── ANSI ────────────────────────────────────────────────────────────
@@ -151,7 +153,7 @@ render_full() {
 }
 
 # ── Mode dispatch (from config file or argument) ────────────────────
-MODE_FILE="$HOME/projects/cc-kit/data/.display_mode"
+MODE_FILE="__CC_KIT_DIR__/data/.display_mode"
 mode="${1:-}"
 # If no arg, read from saved mode file, fallback to single
 if [[ -z "$mode" ]]; then

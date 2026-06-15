@@ -57,11 +57,21 @@ make test
 
 ### Bash
 
-- `set -euo pipefail` at the top of every script
+- Use this header at the top of every script (POSIX-safe + bash `pipefail`):
+  ```bash
+  set -eu
+  [ -n "${BASH_VERSION:-}" ] && set -o pipefail
+  ```
+  The conditional `pipefail` keeps `install.sh` / `uninstall.sh` from
+  breaking when invoked under `dash` (`/bin/sh` on Ubuntu/Debian).
 - Use `[[ ]]` for tests, never `[ ]`
 - Quote everything: `"$var"`, not `$var`
 - Functions in `modules/*.sh` use snake_case with a `monitor_` / `cc_` prefix
 - Comments explain *why*, not *what*
+- Avoid `(( expr ))` returning 0 — with `set -e`, `(( 0 > 0 ))` exits the
+  script. Use `[ "$n" -gt 0 ]` for count comparisons.
+- Append `|| true` (or `; true`) to `grep ... | wc -l` so empty-match
+  exits with 0 instead of triggering `pipefail`.
 
 ```bash
 # Good

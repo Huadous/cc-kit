@@ -13,7 +13,23 @@
 #   5. Back up ~/.claude/settings.json, merge statusLine + Stop/SessionStart hooks
 #   6. Symlink bin/cc-* into ~/.local/bin
 #   7. Append a marked block to ~/.bashrc to source init.sh
-set -euo pipefail
+# Strict mode: -e (exit on error) and -u (unset variable) are POSIX-safe.
+# `-o pipefail` is a bash extension; under `dash` (Ubuntu's /bin/sh) it errors
+# out, so we enable it only when bash is the actual interpreter.
+set -eu
+[ -n "${BASH_VERSION:-}" ] && set -o pipefail
+
+# Bash-only constructs are used throughout the rest of this script
+# (BASH_VERSINFO, [[ ]], arrays). Detect dash/posh and bail with a clear
+# message instead of failing on the first bash-only line.
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo ""
+  echo "  ✗ install.sh requires bash." >&2
+  echo "    You invoked it with: $(ps -o comm= -p $$ 2>/dev/null || echo 'sh')" >&2
+  echo "    Re-run with:        bash install.sh" >&2
+  echo "" >&2
+  exit 1
+fi
 
 # ── Resolve install path ────────────────────────────────────────────
 CC_KIT_ROOT="${CC_KIT_ROOT:-$HOME/.cc-kit}"
@@ -52,7 +68,7 @@ check_cmd awk
 check_cmd grep
 
 # bash ≥ 4
-if (( BASH_VERSINFO[0] >= 4 )); then
+if [ "${BASH_VERSINFO[0]}" -ge 4 ]; then
   echo "  ✓ bash ≥ 4 (${BASH_VERSION})"
 else
   echo "  ✗ bash ≥ 4 required (have ${BASH_VERSION})"
@@ -86,7 +102,7 @@ else
   REINSTALL=0
 fi
 
-if (( fail )); then
+if [ "$fail" -ne 0 ]; then
   echo ""
   echo "  Pre-flight failed. Install missing dependencies and retry."
   exit 1
@@ -138,8 +154,8 @@ sed -i "s|~/projects/cc-kit|$CC_KIT_ROOT|g" \
   "$CC_KIT_ROOT"/hooks/* \
   "$CC_KIT_ROOT"/init.sh 2>/dev/null || true
 remaining=$(grep -rln "__CC_KIT_DIR__\|__CC_KIT_ROOT__\|~/projects/cc-kit" \
-  "$CC_KIT_ROOT"/bin "$CC_KIT_ROOT"/modules "$CC_KIT_ROOT"/hooks "$CC_KIT_ROOT"/init.sh 2>/dev/null | wc -l)
-if (( remaining > 0 )); then
+  "$CC_KIT_ROOT"/bin "$CC_KIT_ROOT"/modules "$CC_KIT_ROOT"/hooks "$CC_KIT_ROOT"/init.sh 2>/dev/null | wc -l; true)
+if [ "$remaining" -gt 0 ]; then
   echo "  ✗ WARNING: $remaining files still have unsubstituted placeholders"
   grep -rln "__CC_KIT_DIR__\|__CC_KIT_ROOT__\|~/projects/cc-kit" \
     "$CC_KIT_ROOT"/bin "$CC_KIT_ROOT"/modules "$CC_KIT_ROOT"/hooks "$CC_KIT_ROOT"/init.sh

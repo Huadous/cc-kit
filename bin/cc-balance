@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # cc-balance — Query provider account balance and cache for statusLine
-set -euo pipefail
+# See install.sh for why this is conditional.
+set -eu
+[ -n "${BASH_VERSION:-}" ] && set -o pipefail
 
-CC_KIT_DIR="$HOME/projects/cc-kit"
+CC_KIT_DIR="__CC_KIT_DIR__"
 source "$CC_KIT_DIR/modules/monitor.sh" 2>/dev/null || true
 
 query_deepseek() {

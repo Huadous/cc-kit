@@ -26,9 +26,15 @@ cc-kit 让 Claude Code 适配**你**的实际工作流：
 
 ## 快速开始
 
+需要 `bash ≥ 4` 和 `python3 ≥ 3.8`，其他依赖现代 macOS / Ubuntu 都自带。
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Huadous/cc-kit/main/install.sh | bash
 ```
+
+> 注意：用 `bash install.sh`，不要用 `sh install.sh` —— Ubuntu/Debian 的
+> `/bin/sh` 是 `dash`，不支持脚本里的 bash 特有语法。上面这行命令已经
+> 管道到 `bash`，无需关心。
 
 然后：
 

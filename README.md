@@ -26,9 +26,16 @@ No telemetry. No cloud. Your data stays on your machine.
 
 ## Quick start
 
+Requires `bash ≥ 4` and `python3 ≥ 3.8`. Everything else is pre-installed on
+modern macOS / Ubuntu.
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Huadous/cc-kit/main/install.sh | bash
 ```
+
+> Note: use `bash install.sh`, never `sh install.sh` — on Ubuntu/Debian,
+> `/bin/sh` is `dash`, which doesn't support bash-only constructs.
+> The one-liner above pipes into `bash` so this is automatic.
 
 Then:
 

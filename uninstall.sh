@@ -6,7 +6,9 @@
 #   2. Remove the # BEGIN/END cc-kit block from ~/.bashrc
 #   3. Delete ~/.local/bin/cc-* symlinks
 #   4. Ask before removing data/ (default: keep — preserves API keys + history)
-set -euo pipefail
+# See install.sh for why this is conditional.
+set -eu
+[ -n "${BASH_VERSION:-}" ] && set -o pipefail
 
 CC_KIT_ROOT="${CC_KIT_ROOT:-$HOME/.cc-kit}"
 BASHRC_FILE="$HOME/.bashrc"

@@ -2,6 +2,29 @@
 
 If `./install.sh` failed or something looks off, check this list first.
 
+## "install.sh requires bash"
+
+This is the most common error. It means you ran `sh install.sh` instead of
+`bash install.sh`. On Ubuntu/Debian, `/bin/sh` is `dash`, which doesn't
+support the bash-only constructs used throughout the script (`[[ ]]`,
+arrays, `BASH_VERSINFO`).
+
+```bash
+# ❌ wrong on Ubuntu/Debian
+sh install.sh
+
+# ✓ always works
+bash install.sh
+```
+
+The recommended install command uses `| bash` so this is handled for you:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Huadous/cc-kit/main/install.sh | bash
+```
+
+---
+
 ## Pre-flight checks
 
 `install.sh` refuses to run if these are missing. Output is a clear list of
