@@ -27,6 +27,7 @@ cat << 'EOF'
   Status Bar
     Always visible at bottom — shows provider, tokens, cost, balance
 
-  More:  ~/projects/cc-kit/README  (coming soon)
+  More:  https://github.com/Huadous/cc-kit
+         docs/INSTALL.md   docs/PROVIDERS.md   docs/FAQ.md
 
 EOF
