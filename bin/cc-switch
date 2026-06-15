@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# cc-switch — Claude Code provider switcher (standalone script for ! prefix)
+source "$HOME/projects/cc-kit/modules/switch.sh" 2>/dev/null
+cc-switch "$@"

@@ -1,0 +1,315 @@
+# switch.sh — Provider/model switcher (cc-kit) provider switcher (bash function)
+# Source this file from ~/.bashrc to make the "cc-switch" command available.
+#
+# Everything lives under $CC_KIT_DIR/data/
+#   cc-switch       — this file (sourced by ~/.bashrc)
+#   provider.env    — active provider config (sourced by ~/.bashrc)
+#   secrets.env     — persisted API keys per provider (chmod 600)
+
+CC_KIT_DIR="${CC_KIT_DIR:-__CC_KIT_DIR__}"
+CONFIG_FILE="$CC_KIT_DIR/data/provider.env"
+SECRETS_FILE="$CC_KIT_DIR/data/secrets.env"
+BASHRC_FILE="$HOME/.bashrc"
+
+mkdir -p "$CC_KIT_DIR"
+
+mask_value() {
+  local value="${1:-}"
+  if [[ -z "$value" ]]; then
+    echo ""
+  elif [[ ${#value} -le 8 ]]; then
+    echo "****"
+  else
+    echo "${value:0:4}****${value: -4}"
+  fi
+}
+
+ensure_bashrc_source() {
+  local marker="source \"${CC_KIT_DIR}/data/provider.env\""
+  local old_marker='source "$HOME/.claude/model-provider.env"'
+
+  if grep -Fq "$old_marker" "$BASHRC_FILE" 2>/dev/null; then
+    sed -i "\|$old_marker|d" "$BASHRC_FILE"
+    sed -i '/^# Claude Code model provider switcher$/d' "$BASHRC_FILE"
+    sed -i '/^if \[ -f "\$HOME\/.claude\/model-provider.env" \]; then$/d' "$BASHRC_FILE"
+    sed -i '/^  source "\$HOME\/.claude\/model-provider.env"$/d' "$BASHRC_FILE"
+    sed -i '/^fi$/d' "$BASHRC_FILE"
+  fi
+
+  if ! grep -Fq "$marker" "$BASHRC_FILE" 2>/dev/null; then
+    {
+      echo ""
+      echo "# cc-kit — Claude Code provider switcher"
+      echo "if [ -f \"${CC_KIT_DIR}/data/provider.env\" ]; then"
+      echo "  source \"${CC_KIT_DIR}/data/provider.env\""
+      echo "fi"
+    } >> "$BASHRC_FILE"
+  fi
+}
+
+load_secrets() {
+  if [[ -f "$SECRETS_FILE" ]]; then
+    source "$SECRETS_FILE"
+  fi
+}
+
+save_secret() {
+  local provider="$1"
+  local key="$2"
+  local var_name
+  var_name="$(echo "$provider" | tr '[:lower:]' '[:upper:]')_API_KEY"
+
+  if [[ -f "$SECRETS_FILE" ]]; then
+    if grep -q "^export ${var_name}=" "$SECRETS_FILE" 2>/dev/null; then
+      local tmpfile
+      tmpfile="$(mktemp)"
+      sed "s/^export ${var_name}=.*/export ${var_name}=\"${key//\//\\/}\"/" "$SECRETS_FILE" > "$tmpfile"
+      mv "$tmpfile" "$SECRETS_FILE"
+    else
+      echo "export ${var_name}=\"$key\"" >> "$SECRETS_FILE"
+    fi
+  else
+    echo "# cc-switch persisted API keys" > "$SECRETS_FILE"
+    echo "export ${var_name}=\"$key\"" >> "$SECRETS_FILE"
+  fi
+
+  chmod 600 "$SECRETS_FILE"
+}
+
+get_saved_key() {
+  local provider="$1"
+  local var_name
+  var_name="$(echo "$provider" | tr '[:lower:]' '[:upper:]')_API_KEY"
+
+  load_secrets
+  echo "${!var_name:-}"
+}
+
+prompt_secret() {
+  local prompt="$1"
+  local secret=""
+  local char
+
+  printf '%s' "$prompt" >&2
+
+  stty -echo
+  while IFS= read -r -n1 char; do
+    if [[ -z "$char" ]]; then
+      break
+    fi
+    if [[ "$char" == $'\x7f' || "$char" == $'\b' ]]; then
+      if [[ -n "$secret" ]]; then
+        secret="${secret%?}"
+        printf '\b \b' >&2
+      fi
+      continue
+    fi
+    secret+="$char"
+    printf '*' >&2
+  done
+  stty echo
+  printf '\n' >&2
+
+  if [[ -z "$secret" ]]; then
+    echo "API key cannot be empty." >&2
+    return 1
+  fi
+  printf '%s' "$secret"
+}
+
+resolve_key() {
+  local provider="$1"
+  local force_new="${2:-false}"
+  local saved_key
+
+  saved_key="$(get_saved_key "$provider")"
+
+  if [[ "$force_new" != "true" && -n "$saved_key" ]]; then
+    echo "Using saved ${provider} API key: $(mask_value "$saved_key")" >&2
+    printf '%s' "$saved_key"
+    return 0
+  fi
+
+  if [[ "$force_new" == "true" && -n "$saved_key" ]]; then
+    echo "Replacing saved ${provider} API key: $(mask_value "$saved_key")" >&2
+  fi
+
+  local key
+  key="$(prompt_secret "Enter ${provider} API key: ")" || return 1
+  save_secret "$provider" "$key"
+  printf '%s' "$key"
+}
+
+cc-switch() {
+  local provider="${1:-}"
+  local force_new="false"
+  local key
+  local model="" main_model sub_model model_label
+
+  # Parse extra args: model name or --new-key (order doesn't matter)
+  for arg in "${@:2}"; do
+    case "$arg" in
+      --new-key|-n) force_new="true" ;;
+      pro|flash|m2.7|m2-7|highspeed|m3) model="$arg" ;;
+      *)
+        echo "Unknown option: $arg" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  # Resolve model defaults & map to actual model IDs
+  case "$provider" in
+    deepseek)
+      case "${model:-pro}" in
+        pro)    main_model="deepseek-v4-pro[1m]"; sub_model="deepseek-v4-flash";  model_label="pro" ;;
+        flash)  main_model="deepseek-v4-flash";    sub_model="deepseek-v4-flash"; model_label="flash" ;;
+      esac
+      ;;
+    minimax)
+      case "${model:-m2.7}" in
+        m2.7|m2-7) main_model="MiniMax-M2.7";           sub_model="MiniMax-M2.7-highspeed"; model_label="M2.7" ;;
+        highspeed)  main_model="MiniMax-M2.7-highspeed"; sub_model="MiniMax-M2.7-highspeed"; model_label="M2.7-highspeed" ;;
+        m3)         main_model="MiniMax-M3";             sub_model="MiniMax-M2.7-highspeed"; model_label="M3" ;;
+      esac
+      ;;
+  esac
+
+  case "$provider" in
+    deepseek)
+      key="$(resolve_key "deepseek" "$force_new")" || return 1
+      cat > "$CONFIG_FILE" <<EOF
+# Generated by cc-switch
+# Provider: DeepSeek  Model: ${model_label}
+export ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic"
+export ANTHROPIC_AUTH_TOKEN="$key"
+export ANTHROPIC_MODEL="$main_model"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$main_model"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$main_model"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$sub_model"
+export CLAUDE_CODE_SUBAGENT_MODEL="$sub_model"
+export CLAUDE_CODE_EFFORT_LEVEL="max"
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
+EOF
+      chmod 600 "$CONFIG_FILE"
+      ensure_bashrc_source
+      echo "✓ Switched to DeepSeek (${model_label})."
+      # Refresh balance cache so statusLine shows fresh number, not the
+      # previous provider's stale balance.
+      _cc_switch_refresh_balance
+      ;;
+
+    minimax)
+      key="$(resolve_key "minimax" "$force_new")" || return 1
+      cat > "$CONFIG_FILE" <<EOF
+# Generated by cc-switch
+# Provider: MiniMax  Model: ${model_label}
+export ANTHROPIC_BASE_URL="https://api.minimaxi.com/anthropic"
+export ANTHROPIC_AUTH_TOKEN="$key"
+export ANTHROPIC_MODEL="$main_model"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$main_model"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$main_model"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$sub_model"
+export CLAUDE_CODE_SUBAGENT_MODEL="$sub_model"
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
+export API_TIMEOUT_MS="3000000"
+export CLAUDE_CODE_AUTO_COMPACT_WINDOW="512000"
+EOF
+      chmod 600 "$CONFIG_FILE"
+      ensure_bashrc_source
+      echo "✓ Switched to MiniMax (${model_label})."
+      _cc_switch_refresh_balance
+      ;;
+
+    anthropic)
+      cat > "$CONFIG_FILE" <<'EOF'
+# Generated by cc-switch
+# Provider: Anthropic default
+unset ANTHROPIC_BASE_URL
+unset ANTHROPIC_AUTH_TOKEN
+unset ANTHROPIC_MODEL
+unset ANTHROPIC_DEFAULT_OPUS_MODEL
+unset ANTHROPIC_DEFAULT_SONNET_MODEL
+unset ANTHROPIC_DEFAULT_HAIKU_MODEL
+unset CLAUDE_CODE_SUBAGENT_MODEL
+unset CLAUDE_CODE_EFFORT_LEVEL
+unset CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+EOF
+      chmod 600 "$CONFIG_FILE"
+      ensure_bashrc_source
+      echo "✓ Restored to Anthropic default."
+      ;;
+
+    show)
+      if [[ -f "$CONFIG_FILE" ]]; then
+        source "$CONFIG_FILE"
+      fi
+      echo "Current Claude Code provider environment:"
+      echo "ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}"
+      echo "ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}"
+      echo "ANTHROPIC_DEFAULT_OPUS_MODEL=${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
+      echo "ANTHROPIC_DEFAULT_SONNET_MODEL=${ANTHROPIC_DEFAULT_SONNET_MODEL:-}"
+      echo "ANTHROPIC_DEFAULT_HAIKU_MODEL=${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}"
+      echo "CLAUDE_CODE_SUBAGENT_MODEL=${CLAUDE_CODE_SUBAGENT_MODEL:-}"
+      echo "CLAUDE_CODE_EFFORT_LEVEL=${CLAUDE_CODE_EFFORT_LEVEL:-}"
+      echo "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:-}"
+      echo "ANTHROPIC_AUTH_TOKEN=$(mask_value "${ANTHROPIC_AUTH_TOKEN:-}")"
+      echo "Config file: $CONFIG_FILE"
+      if [[ -f "$SECRETS_FILE" ]]; then
+        echo ""
+        echo "Saved API keys:"
+        load_secrets
+        echo "  DeepSeek: $(mask_value "${DEEPSEEK_API_KEY:-}")"
+        echo "  MiniMax:  $(mask_value "${MINIMAX_API_KEY:-}")"
+      fi
+      return 0
+      ;;
+
+    -h|--help|help|"")
+      cat <<'EOF'
+Usage:
+  cc-switch deepseek [pro|flash]           Switch to DeepSeek (default: pro)
+  cc-switch minimax [m2.7|highspeed|m3]    Switch to MiniMax (default: m2.7)
+  cc-switch anthropic                      Restore official Anthropic default
+  cc-switch show                           Show current provider config
+  cc-switch <provider> <model> --new-key   Force re-enter API key
+
+DeepSeek models:
+  pro     deepseek-v4-pro[1m] (main)  + deepseek-v4-flash (subagent)
+  flash   deepseek-v4-flash (main)    + deepseek-v4-flash (subagent)
+
+MiniMax models:
+  m2.7       MiniMax-M2.7 (main)          + MiniMax-M2.7-highspeed (subagent)
+  highspeed  MiniMax-M2.7-highspeed (main) + MiniMax-M2.7-highspeed (subagent)
+  m3         MiniMax-M3 (main)            + MiniMax-M2.7-highspeed (subagent)
+
+Notes:
+  - API keys persist in \$CC_KIT_DIR/data/secrets.env
+  - Switching back to a used provider reuses the saved key
+  - Use --new-key to replace a saved key
+  - bashrc is sourced automatically after switching
+EOF
+      return 0
+      ;;
+
+    *)
+      echo "Unknown provider: $provider" >&2
+      echo "Usage: cc-switch [deepseek|minimax|anthropic|show]" >&2
+      return 1
+      ;;
+  esac
+
+  # Auto-source bashrc to apply changes immediately
+  if [[ -f "$BASHRC_FILE" ]]; then
+    source "$BASHRC_FILE"
+  fi
+}
+
+# Refresh balance for the current provider (called after cc-switch).
+# Always invokes cc-balance in the background; never blocks the switch.
+_cc_switch_refresh_balance() {
+  local bin="$CC_KIT_DIR/bin/cc-balance"
+  if [[ -x "$bin" ]]; then
+    ( "$bin" auto >/dev/null 2>&1 & )
+  fi
+}

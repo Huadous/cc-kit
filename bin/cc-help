@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# cc-help — Display cc-kit help (zero tokens, run with !cc-help in Claude Code)
+cat << 'EOF'
+
+  ◈  CC-KIT  —  Claude Code Extensions Toolkit
+  ─────────────────────────────────────────────
+
+  Model Switching
+    cc-switch deepseek             DeepSeek Pro + Flash subagent
+    cc-switch deepseek flash       DeepSeek Flash only
+    cc-switch minimax              MiniMax M2.7 + highspeed subagent
+    cc-switch minimax m3           MiniMax M3 + highspeed subagent
+    cc-switch anthropic            Restore Anthropic default
+    cc-switch show                 Show current config
+
+  Display Modes
+    cc-mode single                  1-line compact
+    cc-mode wide                    2-line layout
+    cc-mode full                    3-line dashboard (default)
+    cc-mode show                    Show current mode
+    (then /reload-plugins to apply)
+
+  Token & Balance
+    cc-balance                     Query account balance
+    cc-dash                        Full standalone dashboard
+
+  Status Bar
+    Always visible at bottom — shows provider, tokens, cost, balance
+
+  More:  ~/projects/cc-kit/README  (coming soon)
+
+EOF

@@ -1,0 +1,10 @@
+# cc-kit shellcheck config
+# https://github.com/koalaman/shellcheck/blob/master/shellcheckrc
+
+# Allow our sourced-variable pattern
+disable=SC1090
+disable=SC1091
+
+# We use `local` in some library functions; SC2155 warns about masking
+# return values, which we handle explicitly where it matters.
+disable=SC2155

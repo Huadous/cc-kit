@@ -1,0 +1,17 @@
+# gitleaks config — only block actual secrets, not placeholder examples
+# https://github.com/gitleaks/gitleaks
+
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+    # Template files contain example placeholders, not real keys
+    '''data/.*\.example$''',
+    # Documentation
+    '''docs/.*\.md$''',
+    '''README.*\.md$''',
+    # The detection rules themselves
+    '''\.gitleaks\.toml$''',
+    '''\.pre-commit-config\.yaml$''',
+]

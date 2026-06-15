@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: lint + test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install bats
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            brew install bats-core
+          else
+            sudo apt-get update
+            sudo apt-get install -y bats
+          fi
+
+      - name: Install shellcheck
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            brew install shellcheck
+          else
+            sudo apt-get install -y shellcheck
+          fi
+
+      - name: Install python3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
+
+      - name: Placeholder check
+        run: |
+          if grep -rln '__CC_KIT_DIR__\|__CC_KIT_ROOT__\|~/projects/cc-kit' \
+              bin/ modules/ hooks/ init.sh 2>/dev/null; then
+            echo "ERROR: unsubstituted placeholders found"
+            exit 1
+          fi
+          echo "✓ all placeholders substituted"

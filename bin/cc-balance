@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# cc-balance — Query provider account balance and cache for statusLine
+set -euo pipefail
+
+CC_KIT_DIR="$HOME/projects/cc-kit"
+source "$CC_KIT_DIR/modules/monitor.sh" 2>/dev/null || true
+
+query_deepseek() {
+  local key="${DEEPSEEK_API_KEY:-}"
+  if [[ -f "$CC_KIT_DIR/data/secrets.env" ]]; then
+    source "$CC_KIT_DIR/data/secrets.env"
+    key="${DEEPSEEK_API_KEY:-$key}"
+  fi
+  if [[ -z "$key" ]]; then
+    echo "No DeepSeek API key found" >&2
+    return 1
+  fi
+
+  local resp
+  resp=$(curl -s --max-time 10 "https://api.deepseek.com/user/balance" \
+    -H "Authorization: Bearer $key" 2>/dev/null || echo "")
+
+  if [[ -z "$resp" ]]; then
+    return 1
+  fi
+
+  local balance
+  balance=$(echo "$resp" | python3 -c "
+import json,sys
+try:
+    data = json.load(sys.stdin)
+    if 'balance_infos' in data:
+        total = sum(float(b.get('total_balance', 0)) for b in data['balance_infos'])
+        currency = data['balance_infos'][0].get('currency', 'CNY')
+        print(f'{total:.2f} {currency}')
+    elif 'data' in data:
+        for field in ('total_balance', 'balance', 'available'):
+            if field in data['data']:
+                print(f\"{float(data['data'][field]):.2f}\")
+                break
+    elif 'balance' in data:
+        print(f\"{float(data['balance']):.2f}\")
+    else:
+        print('')
+except:
+    print('')
+" 2>/dev/null || echo "")
+
+  if [[ -n "$balance" && "$balance" != "0.00" ]]; then
+    echo "$balance" > "$(monitor_balance_cache_file)"
+    echo "$balance"
+  else
+    echo "Parse failed" >&2
+    return 1
+  fi
+}
+
+query_minimax() {
+  local key="${MINIMAX_API_KEY:-}"
+  if [[ -f "$CC_KIT_DIR/data/secrets.env" ]]; then
+    source "$CC_KIT_DIR/data/secrets.env"
+    key="${MINIMAX_API_KEY:-$key}"
+  fi
+  if [[ -z "$key" ]]; then
+    echo "No MiniMax API key found" >&2
+    return 1
+  fi
+
+  # MiniMax coding plan: 5-hour window + weekly window quotas.
+  # The legacy /v1/account/balance endpoint is 404 for coding-plan users.
+  local resp
+  resp=$(curl -s --max-time 10 \
+    "https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains" \
+    -H "Authorization: Bearer $key" 2>/dev/null || echo "")
+
+  if [[ -z "$resp" ]]; then
+    return 1
+  fi
+
+  # Output format: "<pct_left>%  5h:HH:MM  wk:NN%"  (one line, space-separated)
+  echo "$resp" | python3 -c "
+import json,sys
+def fmt_ms(ms):
+    s = ms // 1000
+    h, rem = divmod(s, 3600)
+    m = rem // 60
+    return f'{h}h{m:02d}m'
+try:
+    data = json.load(sys.stdin)
+    if data.get('base_resp', {}).get('status_code') != 0:
+        print(''); sys.exit(0)
+    rows = data.get('model_remains') or []
+    # Prefer the 'general' model (the one M2.7/M3 consume against)
+    general = next((r for r in rows if r.get('model_name') == 'general'), rows[0] if rows else None)
+    if not general:
+        print(''); sys.exit(0)
+    interval_pct = general.get('current_interval_remaining_percent', 0)
+    weekly_pct   = general.get('current_weekly_remaining_percent', 0)
+    rem_ms       = general.get('remains_time', 0)
+    print(f'{interval_pct}%  5h:{fmt_ms(rem_ms)}  wk:{weekly_pct}%')
+except Exception:
+    print('')
+" 2>/dev/null
+}
+
+# Main
+provider="${1:-auto}"
+
+if [[ "$provider" == "auto" ]]; then
+  # Detect current provider
+  if [[ -f "$CC_KIT_DIR/data/provider.env" ]]; then
+    source "$CC_KIT_DIR/data/provider.env"
+    case "${ANTHROPIC_BASE_URL:-}" in
+      *deepseek*) provider="deepseek" ;;
+      *minimax*)  provider="minimax" ;;
+      *)          echo "Anthropic: use console.anthropic.com to check balance"; exit 0 ;;
+    esac
+  fi
+fi
+
+case "$provider" in
+  deepseek) query_deepseek ;;
+  minimax)
+    out=$(query_minimax)
+    if [[ -n "$out" ]]; then
+      echo "$out" > "$(monitor_balance_cache_file)"
+      echo "$out"
+    else
+      echo "Parse failed (coding_plan endpoint returned no data)" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "Usage: cc-balance [deepseek|minimax|auto]" >&2
+    exit 1
+    ;;
+esac

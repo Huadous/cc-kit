@@ -1,0 +1,7 @@
+# Defense-in-depth: even if top-level .gitignore is bypassed,
+# this directory contains only ephemeral runtime state.
+# Only commit the templates and this file itself.
+*
+!.gitignore
+!.gitkeep
+!*.example

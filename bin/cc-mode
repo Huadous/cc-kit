@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# cc-mode — Switch cc-kit statusLine display mode
+# Usage: cc-mode [single|wide|full]
+set -euo pipefail
+
+MODE_FILE="$HOME/projects/cc-kit/data/.display_mode"
+mkdir -p "$(dirname "$MODE_FILE")"
+
+mode="${1:-}"
+
+show_modes() {
+  local current="${CC_KIT_DISPLAY_MODE:-single}"
+  if [[ -f "$MODE_FILE" ]]; then
+    current=$(cat "$MODE_FILE")
+  fi
+  echo "cc-kit display modes:"
+  for m in single wide full; do
+    if [[ "$m" == "$current" ]]; then
+      echo "  ◆ $m  ← current"
+    else
+      echo "    $m"
+    fi
+  done
+  echo ""
+  echo "Usage: cc-mode [single|wide|full]"
+}
+
+case "$mode" in
+  single|wide|full)
+    echo "$mode" > "$MODE_FILE"
+    echo "✓ Display mode set to: $mode"
+    echo "  Run /reload-plugins in Claude Code to apply."
+    ;;
+  show|"")
+    show_modes
+    ;;
+  *)
+    echo "Unknown mode: $mode" >&2
+    show_modes
+    exit 1
+    ;;
+esac

@@ -1,0 +1,12 @@
+# cc-kit pre-commit hooks (optional, see docs/CONTRIBUTING.md)
+#
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+        # Allow .example templates (they're meant to be public-ish)
+        args: ["--config", ".gitleaks.toml"]

@@ -1,0 +1,3 @@
+# Placeholder so an empty data/ directory survives a git checkout.
+# Real files in this directory (provider.env, secrets.env, usage.db, etc.)
+# are listed in .gitignore and must NEVER be committed.

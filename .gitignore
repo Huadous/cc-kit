@@ -1,0 +1,23 @@
+# ── Runtime / secrets — never commit ──
+data/provider.env
+data/secrets.env
+data/.balance_cache
+data/.display_mode
+data/usage.db
+data/.backup/
+
+# ── Editor / OS ──
+.DS_Store
+*.swp
+*.swo
+*.bak
+.idea/
+.vscode/
+*~
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ── Local dev ──
+.cc-kit-test/
+*.local
