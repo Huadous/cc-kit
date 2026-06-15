@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # switch.sh — Provider/model switcher (cc-kit) provider switcher (bash function)
 # Source this file from ~/.bashrc to make the "cc-switch" command available.
 #

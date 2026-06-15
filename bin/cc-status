@@ -18,15 +18,14 @@ source "$CC_KIT_DIR/modules/monitor.sh" 2>/dev/null || true
 # ── ANSI ────────────────────────────────────────────────────────────
 R='\033[0m' B='\033[1m' D='\033[2m'
 BLUE='\033[34m' GREEN='\033[32m' CYAN='\033[36m'
-MAGENTA='\033[35m' YELLOW='\033[33m' RED='\033[31m' GRAY='\033[90m' WHITE='\033[37m'
+MAGENTA='\033[35m' YELLOW='\033[33m' RED='\033[31m' GRAY='\033[90m'
 
 # ── Parse stdin (save for Python full mode passthrough) ────────────
 STDIN_JSON="{}"
-ctx_pct="" ctx_used="" ctx_max=""
+ctx_pct=""
 if [[ -p /dev/stdin ]] || [[ ! -t 0 ]]; then
   STDIN_JSON=$(cat 2>/dev/null | head -1 || echo "{}")
   ctx_pct=$(echo "$STDIN_JSON" | grep -o '"remaining_percentage":[0-9.]*' 2>/dev/null | cut -d: -f2 | cut -d. -f1 || echo "")
-  ctx_used=$(echo "$STDIN_JSON" | grep -o '"current_usage":[0-9]*' 2>/dev/null | cut -d: -f2 || echo "")
 fi
 
 # ── Gather all data once ────────────────────────────────────────────

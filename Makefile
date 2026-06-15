@@ -12,7 +12,10 @@ help:
 
 lint:
 	@echo "→ shellcheck..."
-	@shellcheck -S warning bin/* modules/* hooks/* install.sh init.sh uninstall.sh 2>&1 \
+	@shellcheck -S warning \
+	  bin/cc-balance bin/cc-help bin/cc-mode bin/cc-status bin/cc-switch \
+	  hooks/* modules/* \
+	  install.sh init.sh uninstall.sh 2>&1 \
 	  || (echo "shellcheck failed"; exit 1)
 	@echo "→ pyflakes..."
 	@python3 -m pyflakes bin/*.py 2>&1 \

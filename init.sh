@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # cc-kit init — sourced by ~/.bashrc
 CC_KIT_ROOT="${CC_KIT_ROOT:-__CC_KIT_ROOT__}"
 

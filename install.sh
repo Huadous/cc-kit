@@ -97,9 +97,6 @@ if [[ -d "$CC_KIT_ROOT" ]]; then
   echo "  ! $CC_KIT_ROOT already exists."
   read -rp "    Reinstall? This will overwrite code (data/ is preserved) [y/N] " ans
   [[ "$ans" =~ ^[Yy]$ ]] || { echo "  Aborted."; exit 1; }
-  REINSTALL=1
-else
-  REINSTALL=0
 fi
 
 if [ "$fail" -ne 0 ]; then
@@ -228,7 +225,7 @@ for src in "$CC_KIT_ROOT"/bin/*; do
   link_name="${name%.py}"
   ln -sf "$src" "$LOCAL_BIN/$link_name"
 done
-echo "  ✓ symlinked: $(ls "$LOCAL_BIN"/cc-* 2>/dev/null | xargs -n1 basename | tr '\n' ' ')"
+echo "  ✓ symlinked: $(find "$LOCAL_BIN" -maxdepth 1 -name 'cc-*' -printf '%f ' 2>/dev/null)"
 
 # Ensure ~/.local/bin is in PATH
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$LOCAL_BIN"; then
