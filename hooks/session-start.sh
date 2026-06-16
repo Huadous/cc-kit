@@ -10,7 +10,7 @@ mode=$(cat "__CC_KIT_DIR__/data/.display_mode" 2>/dev/null || echo "full")
 cat <<EOF
 
 
-  ◈  cc-kit active   │   ${label}   │   ${cur}${bal:-?.??} balance   │   mode: ${mode}
+  ◈  cc-kit active   │   ${label}   │   ${cur}${bal:-—} balance   │   mode: ${mode}
 
   Commands:  /cc-help  (help)  ·  /cc-switch  (change model)  ·  !cc-balance  (refresh balance)
 

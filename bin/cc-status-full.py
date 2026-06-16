@@ -93,7 +93,7 @@ now = datetime.now().strftime("%H:%M")
 
 # Line 1: Provider + model | cost + balance | time
 l1_left  = f"◆ {label}  {D}{model}{R}"
-l1_right = f"{YL}{cur}{cost_s} session{R}  {bal_c}{cur}{bal if bal else '?.??'} balance{R}  {D}{now}{R}"
+l1_right = f"{YL}{cur}{cost_s} session{R}  {bal_c}{cur}{bal if bal else '—'} balance{R}  {D}{now}{R}"
 # Calculate visible width of right side (strip ANSI for measurement)
 import re
 def vis(s): return len(re.sub(r'\033\[[0-9;]*m', '', s))

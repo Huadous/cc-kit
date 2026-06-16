@@ -172,3 +172,18 @@ EOF
     [ "$result" = "100" ]
     rm -f /tmp/stats_test
 }
+
+@test "monitor_cached_balance: returns cached value when fresh" {
+    TMPDIR=$(mktemp -d)
+    MONITOR_DATA_DIR="$TMPDIR" echo "50.00 CNY" > "$TMPDIR/.balance_cache"
+    MONITOR_DATA_DIR="$TMPDIR" result=$(MONITOR_DATA_DIR="$TMPDIR" monitor_cached_balance)
+    [ "$result" = "50.00 CNY" ]
+    rm -rf "$TMPDIR"
+}
+
+@test "monitor_cached_balance: empty when no cache file" {
+    TMPDIR=$(mktemp -d)
+    MONITOR_DATA_DIR="$TMPDIR" result=$(MONITOR_DATA_DIR="$TMPDIR" monitor_cached_balance)
+    [ -z "$result" ]
+    rm -rf "$TMPDIR"
+}

@@ -246,10 +246,16 @@ monitor_cached_balance() {
     local cache_age now
     now=$(date +%s)
     cache_age=$(( now - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0) ))
-    if (( cache_age < 600 )); then  # 10 min TTL
+    if [ "$cache_age" -lt 600 ]; then  # 10 min TTL
       cat "$cache_file"
       return
     fi
+  fi
+  # Cache missing or stale: kick off a background refresh so the
+  # next statusLine render has data. Don't block this one — return
+  # empty now and let the refresh happen asynchronously.
+  if [ -x "${CC_KIT_DIR:-}/bin/cc-balance" ]; then
+    ( "${CC_KIT_DIR}/bin/cc-balance" auto >/dev/null 2>&1 & )
   fi
   echo ""
 }
