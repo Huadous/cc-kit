@@ -94,35 +94,88 @@ if bal:
 # ── Build lines (no ANSI inside the content width calculation) ──────
 now = datetime.now().strftime("%H:%M")
 
+# Box geometry: outer width = 92 visible chars (so 90 dashes between
+# corners). Inner content area = 90 - 4 (margins) = 86 chars between
+# the `│` borders. Earlier versions used 78/74 which was too narrow for
+# the verbose pricing + tracked-cost line; everything overflowed.
+INNER_W = 86
+
+# Width helper: visible width = total bytes minus ANSI escape codes.
+import re
+def vis(s): return len(re.sub(r'\033\[[0-9;]*m', '', s))
+
+# If a side still overflows after composing, truncate the right side
+# (visually) so the line never breaks the box. Ellipsize with "…".
+def fit_right(right_str, max_w):
+    if vis(right_str) <= max_w:
+        return right_str
+    # Walk characters, dropping ANSI codes from the count and stopping
+    # when we run out of room. Append an ellipsis if we cut anything.
+    out, used = [], 0
+    i = 0
+    while i < len(right_str):
+        m = re.match(r'\033\[[0-9;]*m', right_str[i:])
+        if m:
+            out.append(m.group(0))
+            i += len(m.group(0))
+            continue
+        if used + 1 > max_w - 1:   # reserve 1 char for ellipsis
+            out.append('…')
+            used += 1
+            break
+        out.append(right_str[i])
+        used += 1
+        i += 1
+    return ''.join(out) + R  # ensure reset code at end
+
+def make_line(left, right):
+    """Compose a left|right line, padded to INNER_W, with right truncated
+    if needed. Returns a string ready to print."""
+    l_vis, r_vis = vis(left), vis(right)
+    avail_r = INNER_W - l_vis - 1   # at least 1 space between L and R
+    if r_vis > avail_r:
+        right = fit_right(right, avail_r)
+        r_vis = vis(right)
+    pad = max(1, INNER_W - l_vis - r_vis)
+    return f"{GY}│{R}  {left}{' ' * pad}{right}  {GY}│{R}"
+
 # Line 1: Provider + model | cost + balance | time
 l1_left  = f"◆ {label}  {D}{model}{R}"
 l1_right = f"{YL}{cur}{cost_s} session{R}  {bal_c}{cur}{bal if bal else '—'} balance{R}  {D}{now}{R}"
-# Calculate visible width of right side (strip ANSI for measurement)
-import re
-def vis(s): return len(re.sub(r'\033\[[0-9;]*m', '', s))
-l1_r_vis = vis(l1_right)
-l1_l_vis = vis(l1_left)
-pad1 = max(1, 76 - l1_l_vis - l1_r_vis)
-l1 = f"{GY}│{R}  {l1_left}{' ' * pad1}{l1_right}  {GY}│{R}"
+l1 = make_line(l1_left, l1_right)
 
-# Line 2: context bar + token stats
+# Line 2: context bar + token stats. Shrink ctx bar to 20 chars if it
+# would otherwise push past INNER_W.
 l2_left = f"context  {ctx_bar}" if ctx_bar else "context"
 l2_right = f"{BL}⬇{fmt(in_tok)} input{R}  {GR}⬆{fmt(out_tok)} output{R}  {B}{fmt(total)} total{R}"
-l2_r_vis = vis(l2_right)
-l2_l_vis = vis(l2_left)
-pad2 = max(1, 76 - l2_l_vis - l2_r_vis)
-l2 = f"{GY}│{R}  {l2_left}{' ' * pad2}{l2_right}  {GY}│{R}"
+if vis(l2_left) + vis(l2_right) + 1 > INNER_W:
+    # Rebuild ctx_bar with 20 segments instead of 30 (preserves color).
+    ctx_bar_short = ""
+    if ctx_pct and ctx_pct != "100":
+        used = 100 - int(ctx_pct)
+        blocks = " ▁▂▃▄▅▆▇█"
+        bar = ""
+        for i in range(20):
+            seg_s = i * 100 // 20
+            seg_e = (i + 1) * 100 // 20
+            if used >= seg_e: lv = 8
+            elif used <= seg_s: lv = 0
+            else: lv = max(1, (used - seg_s) * 8 * 20 // 100 + 1)
+            bar += blocks[min(lv, 8)]
+        if used > 75: c = RD
+        elif used > 50: c = YL
+        else: c = GR
+        ctx_bar_short = f"{c}{bar}{R} {ctx_pct}%"
+    l2_left = f"context  {ctx_bar_short}" if ctx_bar_short else "context"
+l2 = make_line(l2_left, l2_right)
 
-# Line 3: cache hit + cost detail
+# Line 3: cache hit + cost detail. Concise pricing string fits cleanly.
 l3_left  = f"cache    {MG}↯{hit_s}% hit{R}  {YL}{cur}{cost_s} session{R}  {YL}{cur}{cost_g} tracked{R}"
-l3_right = f"{D}pricing: ¥2/M in · ¥0.2/M hit · ¥8/M out{R}"
-l3_r_vis = vis(l3_right)
-l3_l_vis = vis(l3_left)
-pad3 = max(1, 76 - l3_l_vis - l3_r_vis)
-l3 = f"{GY}│{R}  {l3_left}{' ' * pad3}{l3_right}  {GY}│{R}"
+l3_right = f"{D}¥2/M in · ¥0.2/M hit · ¥8/M out{R}"
+l3 = make_line(l3_left, l3_right)
 
-# Box lines
-hline = "─" * 78
+# Box borders (92 visible chars wide: ╭ + 90 dashes + ╮)
+hline = "─" * (INNER_W + 4)
 top = f"{GY}╭{hline}╮{R}"
 sep = f"{GY}├{hline}┤{R}"
 bot = f"{GY}╰{hline}╯{R}"
