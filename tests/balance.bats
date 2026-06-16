@@ -42,13 +42,11 @@ teardown() {
 }
 
 @test "query_deepseek parses balance_infos" {
+    skip "cc-balance is a script, not a library — see docs/SPEC §2"
     cat > "$CC_KIT_DIR/fixture_deepseek.json" <<'EOF'
 {"balance_infos": [{"currency": "CNY", "total_balance": "45.27"}], "available_balance": "45.27"}
 EOF
     source "$BATS_TEST_DIRNAME/../bin/cc-balance" 2>/dev/null || true
-    # The actual query_deepseek function is defined when sourced
-    # Skip if not extracted — full coverage requires refactor
-    skip "cc-balance is a script, not a library — see docs/SPEC §2"
 }
 
 @test "MiniMax coding plan fixture has model_remains" {

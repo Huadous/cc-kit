@@ -23,26 +23,33 @@ lint:
 	@echo "→ bash syntax..."
 	@bash -n install.sh init.sh uninstall.sh
 	@for f in bin/* hooks/* modules/*; do bash -n "$$f" 2>/dev/null || true; done
-	@echo "→ source files SHOULD contain placeholders (sanity):"
-	@found=$$(grep -rln '__CC_KIT_DIR__\|__CC_KIT_ROOT__' \
+	@echo "→ source files SHOULD have self-locating pattern (sanity):"
+	@found=$$(grep -rln 'BASH_SOURCE\[0\]' \
 	    bin/ modules/ hooks/ init.sh 2>/dev/null | wc -l); \
-	  if [ "$$found" -lt 5 ]; then \
-	    echo "ERROR: expected __CC_KIT_DIR__ placeholders in source files, only found $$found"; exit 1; \
+	  if [ "$$found" -lt 8 ]; then \
+	    echo "ERROR: expected self-locating pattern in source files, only found $$found"; exit 1; \
 	  else \
-	    echo "  ✓ $$found source files have placeholders (will be substituted at install)"; \
+	    echo "  ✓ $$found source files have self-locating pattern"; \
 	  fi
 	@echo "✓ all checks passed"
 
 check-installed:
-	@echo "→ checking installed copy at $(CC_KIT_ROOT) for unsubstituted placeholders..."
+	@echo "→ checking installed copy at $(CC_KIT_ROOT)..."
 	@if [ ! -d "$(CC_KIT_ROOT)" ]; then \
 	  echo "  ! $(CC_KIT_ROOT) does not exist; run 'make install-local' first"; exit 0; \
 	fi
+	@missing=$$(for d in bin modules hooks; do \
+	    diff -rq "$(SRC)/$$d" "$(CC_KIT_ROOT)/$$d" 2>&1 \
+	      | grep -v "^Only in $(CC_KIT_ROOT)" || true; \
+	  done); \
+	  if [ -n "$$missing" ]; then \
+	    echo "ERROR: installed copy missing files: $$missing"; exit 1; \
+	  else \
+	    echo "  ✓ installed copy matches source"; \
+	  fi
 	@if grep -rln '__CC_KIT_DIR__\|__CC_KIT_ROOT__\|~/projects/cc-kit' \
 	    $(CC_KIT_ROOT)/bin $(CC_KIT_ROOT)/modules $(CC_KIT_ROOT)/hooks $(CC_KIT_ROOT)/init.sh 2>/dev/null; then \
-	  echo "ERROR: unsubstituted placeholders found in installed copy"; exit 1; \
-	else \
-	  echo "  ✓ installed copy has no remaining placeholders"; \
+	  echo "ERROR: legacy __CC_KIT_DIR__ placeholders found in installed copy"; exit 1; \
 	fi
 
 test:
