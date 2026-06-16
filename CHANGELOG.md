@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-17
+
+### Fixed
+- **SessionStart hook outage**: `~/.claude/settings.json` could end up
+  pointing to a non-existent path (e.g., the test install dir from
+  `make install-local`), causing every Claude Code start to fail with
+  `bash: /home/.../.cc-kit-test/hooks/session-start.sh: No such file or
+  directory`. Two changes that together make this impossible:
+  - `install.sh` settings merger now path-boundary-anchors the regex
+    that detects existing cc-kit hooks (was a substring search that
+    could over-match), and removes all of them before adding fresh
+    entries pointing at the current install dir.
+  - `Makefile` `install-local` target now snapshots
+    `~/.claude/settings.json` and restores it on `EXIT` trap, so
+    CI testing with `CC_KIT_ROOT=~/.cc-kit-test` can never pollute
+    the user's real settings.
+- **Nested directory corruption on reinstall**: `install.sh` used
+  `cp -r SRC DST` where DST already existed as a directory, which
+  creates `DST/SRC/`. After 3 reinstalls this produced
+  `~/.cc-kit/bin/bin/bin/` (with a circular self-symlink) plus
+  `modules/modules/` and `hooks/hooks/` siblings. Now each target
+  dir is `rm -rf`'d before the copy.
+- **`.bashrc` silent truncation**: the awk state machine in
+  `install.sh`'s bashrc-update step would skip everything after
+  `# BEGIN cc-kit` forever if the `# END cc-kit` marker was missing
+  (e.g., a user hand-edited the block). The rest of the rc file
+  was silently lost. Now: only use the awk when both markers
+  exist; otherwise append a fresh complete block. The awk also
+  has an `END { }` guard that fails non-zero if `printing` is
+  still 1 at EOF.
+- **No `.bashrc` backup**: `install.sh` backed up `settings.json`
+  to `~/.cc-kit/.backup/` but never backed up `.bashrc`. If any
+  rewrite corrupted it, the user had no recovery. Now both are
+  backed up before modification.
+
+### Changed
+- **Env-var override warnings** in 9 self-locating scripts
+  (`bin/cc-switch`, `bin/cc-balance`, `bin/cc-mode`, `bin/cc-status`,
+  `modules/switch.sh`, `modules/monitor.sh`,
+  `hooks/session-start.sh`, `hooks/stop-record.sh`, `init.sh`):
+  when `$CC_KIT_DIR` / `$CC_KIT_ROOT` is set in the environment
+  and doesn't match the auto-detected install path, the script
+  writes a `WARNING:` line to stderr. When the env var points to
+  a non-existent path, the script falls back to auto-detection
+  instead of silently using an empty path. Dev override is
+  preserved — this is purely an alert.
+- **`install.sh` warns on rc-file CC_KIT_DIR exports**: scans
+  `~/.bashrc` and `~/.zshrc` for `export CC_KIT_DIR=` /
+  `export CC_KIT_ROOT=` lines at install time and prints a clear
+  hint to remove them. Same root cause as the SessionStart outage
+  — these exports silently override self-location and were the
+  actual trigger.
+- **Zsh support**: `$BASHRC_FILE` is now picked from `$SHELL`
+  (zsh → `~/.zshrc`, bash → `~/.bashrc`). Previously zsh users
+  (macOS default) were silently excluded — the cc-kit block was
+  written to `.bashrc` which their shell never sources.
+- **CI runs Ubuntu only**: `macos-latest` was dropped from the
+  matrix. Scripts are still written defensively for bash 3.2 and
+  no GNU-only utilities, but no macOS runner is available to the
+  maintainer for verification. See `README.md` "Platform support".
+
+### Security
+- **Path-boundary-anchored regex** in `settings.json` merger (both
+  the jq and python3 branches): was `test("/cc-kit|/\.cc-kit")`
+  (substring search) — would over-match unrelated paths like
+  `~/mywork/cc-kit-test/` or `~/.cc-kit-cache/`. Now
+  `test("(^|/)cc-kit(/|$)|(^|/)\\.cc-kit(/|$)")` — only matches
+  actual cc-kit install paths. The two branches share a single
+  source-of-truth regex (jq `def` / python module-level constant)
+  so they can't drift apart.
+
 ## [0.1.0] - 2026-06-16
 
 ### Added
@@ -42,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Balance query: DeepSeek account, MiniMax coding-plan quota
 - SessionStart / Stop hooks
 
-[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.0
 [0.0.1]: https://github.com/Huadous/cc-kit/releases/tag/v0.0.1
