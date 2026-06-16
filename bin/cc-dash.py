@@ -15,7 +15,10 @@ except ImportError:
     print("Please install blessed: pip install blessed")
     sys.exit(1)
 
-CC_KIT_DIR = os.environ.get("CC_KIT_DIR") or "__CC_KIT_DIR__"
+# Self-locate: this script lives at <root>/bin/, so the install root is the parent.
+# Falls back to $CC_KIT_DIR env var if set so the user's dev override still works.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+CC_KIT_DIR = os.environ.get("CC_KIT_DIR") or os.path.dirname(_HERE)
 DATA_DIR = os.path.join(CC_KIT_DIR, "data")
 USAGE_FILE = os.path.join(DATA_DIR, "usage.db")
 

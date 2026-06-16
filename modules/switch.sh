@@ -7,7 +7,16 @@
 #   provider.env    — active provider config (sourced by ~/.bashrc)
 #   secrets.env     — persisted API keys per provider (chmod 600)
 
-CC_KIT_DIR="${CC_KIT_DIR:-__CC_KIT_DIR__}"
+# Self-locate the install root. switch.sh lives at <root>/modules/, so the
+# install root is one level up. Falls back to $CC_KIT_DIR env var.
+_cc_self="${BASH_SOURCE[0]:-$0}"
+while [ -L "$_cc_self" ]; do _cc_self="$(readlink -f "$_cc_self")"; done
+_cc_self_dir="$(cd "$(dirname "$_cc_self")" && pwd)"
+CC_KIT_DIR="${CC_KIT_DIR:-$_cc_self_dir/..}"
+CC_KIT_DIR="$(cd "$CC_KIT_DIR" && pwd)"
+unset _cc_self _cc_self_dir
+
+CONFIG_FILE="$CC_KIT_DIR/data/provider.env"
 CONFIG_FILE="$CC_KIT_DIR/data/provider.env"
 SECRETS_FILE="$CC_KIT_DIR/data/secrets.env"
 BASHRC_FILE="$HOME/.bashrc"
@@ -26,9 +35,10 @@ mask_value() {
 }
 
 ensure_bashrc_source() {
-  local marker="source \"${CC_KIT_DIR}/data/provider.env\""
   local old_marker='source "$HOME/.claude/model-provider.env"'
+  local header='# cc-kit — Claude Code provider switcher'
 
+  # Migrate old-style block (if present) — single shot, then it never returns.
   if grep -Fq "$old_marker" "$BASHRC_FILE" 2>/dev/null; then
     sed -i "\|$old_marker|d" "$BASHRC_FILE"
     sed -i '/^# Claude Code model provider switcher$/d' "$BASHRC_FILE"
@@ -37,15 +47,32 @@ ensure_bashrc_source() {
     sed -i '/^fi$/d' "$BASHRC_FILE"
   fi
 
-  if ! grep -Fq "$marker" "$BASHRC_FILE" 2>/dev/null; then
-    {
-      echo ""
-      echo "# cc-kit — Claude Code provider switcher"
-      echo "if [ -f \"${CC_KIT_DIR}/data/provider.env\" ]; then"
-      echo "  source \"${CC_KIT_DIR}/data/provider.env\""
-      echo "fi"
-    } >> "$BASHRC_FILE"
+  # Dedupe by header comment, not by path. Earlier versions checked for the
+  # exact source-line marker, which didn't catch blocks from prior cc-switch
+  # invocations against other CC_KIT_ROOT / MONITOR_DATA_DIR values (e.g. test
+  # runs). Result: a brand-new block was appended on every switch, accumulating
+  # dozens of stale entries pointing at deleted /tmp/tmp.XXXX paths.
+  #
+  # Strategy: delete EVERY existing cc-kit provider-switcher block (header +
+  # the 3-line if/source/fi body), then append exactly one fresh block. Idempotent.
+  if grep -Fq "$header" "$BASHRC_FILE" 2>/dev/null; then
+    local tmpfile
+    tmpfile="$(mktemp)"
+    awk -v hdr="$header" '
+      $0 == hdr { skip = 3; next }   # skip header + next 3 lines (the block body)
+      skip > 0    { skip--; next }    # ...continuing to skip
+                { print }
+    ' "$BASHRC_FILE" > "$tmpfile" && mv "$tmpfile" "$BASHRC_FILE"
   fi
+
+  # Append exactly one fresh block pointing at the current install dir.
+  {
+    echo ""
+    echo "$header"
+    echo "if [ -f \"${CC_KIT_DIR}/data/provider.env\" ]; then"
+    echo "  source \"${CC_KIT_DIR}/data/provider.env\""
+    echo "fi"
+  } >> "$BASHRC_FILE"
 }
 
 load_secrets() {

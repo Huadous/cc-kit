@@ -136,29 +136,12 @@ fi
 mkdir -p "$BACKUP_DIR"
 [[ ! -f "$CC_KIT_ROOT/data/.display_mode" ]] && echo "full" > "$CC_KIT_ROOT/data/.display_mode"
 
-# ── Step 4: Substitute __CC_KIT_DIR__ placeholders ──────────────────
-echo "→ Substituting path placeholders..."
-sed -i "s|__CC_KIT_DIR__|$CC_KIT_ROOT|g" \
-  "$CC_KIT_ROOT"/bin/* \
-  "$CC_KIT_ROOT"/modules/* \
-  "$CC_KIT_ROOT"/hooks/* \
-  "$CC_KIT_ROOT"/init.sh
-sed -i "s|__CC_KIT_ROOT__|$CC_KIT_ROOT|g" "$CC_KIT_ROOT/init.sh"
-# Replace any leftover literal (shouldn't be any, but just in case)
-sed -i "s|~/projects/cc-kit|$CC_KIT_ROOT|g" \
-  "$CC_KIT_ROOT"/bin/* \
-  "$CC_KIT_ROOT"/modules/* \
-  "$CC_KIT_ROOT"/hooks/* \
-  "$CC_KIT_ROOT"/init.sh 2>/dev/null || true
-remaining=$(grep -rln "__CC_KIT_DIR__\|__CC_KIT_ROOT__\|~/projects/cc-kit" \
-  "$CC_KIT_ROOT"/bin "$CC_KIT_ROOT"/modules "$CC_KIT_ROOT"/hooks "$CC_KIT_ROOT"/init.sh 2>/dev/null | wc -l; true)
-if [ "$remaining" -gt 0 ]; then
-  echo "  ✗ WARNING: $remaining files still have unsubstituted placeholders"
-  grep -rln "__CC_KIT_DIR__\|__CC_KIT_ROOT__\|~/projects/cc-kit" \
-    "$CC_KIT_ROOT"/bin "$CC_KIT_ROOT"/modules "$CC_KIT_ROOT"/hooks "$CC_KIT_ROOT"/init.sh
-else
-  echo "  ✓ all placeholders substituted"
-fi
+# ── Step 4: (no placeholder substitution needed — scripts self-locate) ─
+# Scripts now self-locate their install dir at runtime via BASH_SOURCE /
+# __file__ resolution, so no sed substitution is required. This was a
+# source of subtle bugs in earlier versions (dev override pointing at the
+# source tree would silently fail because placeholders stayed unsubstituted).
+echo "→ Path resolution: scripts self-locate (no substitution needed)"
 
 # ── Step 5: Configure Claude Code settings.json ────────────────────
 echo "→ Configuring Claude Code settings.json..."
@@ -179,36 +162,53 @@ else
     jq --arg cmd "$CC_KIT_ROOT/bin/cc-status" \
        --arg stop "bash $CC_KIT_ROOT/hooks/stop-record.sh" \
        --arg sess "bash $CC_KIT_ROOT/hooks/session-start.sh" '
-      .statusLine //= {type:"command", command:$cmd, padding:0}
+      # Replace statusLine if it points to any cc-kit install path (across
+      # all historical CC_KIT_ROOT values: ~/projects/cc-kit, ~/.cc-kit,
+      # ~/.cc-kit-test, etc.). Otherwise leave the user'"'"'s custom line alone.
+      if (.statusLine?.command // "") | test("/cc-kit|/\\.cc-kit") then
+        .statusLine = {type:"command", command:$cmd, padding:0}
+      else . end
       | .statusLineRefreshInterval //= 5
       | .hooks //= {}
       | .hooks.Stop //= []
       | .hooks.SessionStart //= []
-      | (if (.hooks.Stop | map(.hooks[]?.command // "") | index($stop)) then . else .hooks.Stop += [{matcher:"*", hooks:[{type:"command", command:$stop, timeout:10}]}] end)
-      | (if (.hooks.SessionStart | map(.hooks[]?.command // "") | index($sess)) then . else .hooks.SessionStart += [{matcher:"*", hooks:[{type:"command", command:$sess, timeout:5}]}] end)
+      # Remove ALL matcher entries whose hook command points to any cc-kit
+      # install path. This cleans up entries from previous installs/tests
+      # even when they used a different CC_KIT_ROOT.
+      | .hooks.Stop          |= [.[] | select((.hooks[]?.command // "") | test("/cc-kit|/\\.cc-kit") | not)]
+      | .hooks.SessionStart |= [.[] | select((.hooks[]?.command // "") | test("/cc-kit|/\\.cc-kit") | not)]
+      # Add fresh entries pointing at the current install dir.
+      | .hooks.Stop          += [{matcher:"*", hooks:[{type:"command", command:$stop, timeout:10}]}]
+      | .hooks.SessionStart  += [{matcher:"*", hooks:[{type:"command", command:$sess, timeout:5}]}]
     ' "$SETTINGS_FILE" > "$tmp" && mv "$tmp" "$SETTINGS_FILE"
     echo "  ✓ settings.json updated (via jq)"
   else
     # python3 fallback
     SETTINGS_FILE="$SETTINGS_FILE" CC_KIT_ROOT="$CC_KIT_ROOT" python3 - <<'PYEOF' && echo "  ✓ settings.json updated (via python3)" || echo "  ! failed to update settings.json"
-import json, os
+import json, os, re
 path = os.environ["SETTINGS_FILE"]
 root = os.environ["CC_KIT_ROOT"]
 with open(path) as f:
     cfg = json.load(f)
-cfg.setdefault("statusLine", {"type": "command", "command": f"{root}/bin/cc-status", "padding": 0})
+# Replace statusLine only if it points to a cc-kit install (any path).
+sl_cmd = cfg.get("statusLine", {}).get("command", "") if isinstance(cfg.get("statusLine"), dict) else ""
+if re.search(r"/cc-kit|/\.cc-kit", sl_cmd):
+    cfg["statusLine"] = {"type": "command", "command": f"{root}/bin/cc-status", "padding": 0}
 cfg.setdefault("statusLineRefreshInterval", 5)
 cfg.setdefault("hooks", {})
 cfg["hooks"].setdefault("Stop", [])
 cfg["hooks"].setdefault("SessionStart", [])
-def has(entries, cmd):
-    return any(cmd in (h.get("command","") for h in e.get("hooks", [])) for e in entries)
+# Remove all matcher entries whose hook command points to a cc-kit install.
+def is_cc_kit(entry):
+    return any(re.search(r"/cc-kit|/\.cc-kit", h.get("command",""))
+               for h in entry.get("hooks", []))
+cfg["hooks"]["Stop"]         = [e for e in cfg["hooks"]["Stop"]         if not is_cc_kit(e)]
+cfg["hooks"]["SessionStart"] = [e for e in cfg["hooks"]["SessionStart"] if not is_cc_kit(e)]
+# Add fresh entries.
 stop_cmd = f"bash {root}/hooks/stop-record.sh"
 sess_cmd = f"bash {root}/hooks/session-start.sh"
-if not has(cfg["hooks"]["Stop"], stop_cmd):
-    cfg["hooks"]["Stop"].append({"matcher":"*", "hooks":[{"type":"command","command":stop_cmd,"timeout":10}]})
-if not has(cfg["hooks"]["SessionStart"], sess_cmd):
-    cfg["hooks"]["SessionStart"].append({"matcher":"*", "hooks":[{"type":"command","command":sess_cmd,"timeout":5}]})
+cfg["hooks"]["Stop"].append({"matcher":"*", "hooks":[{"type":"command","command":stop_cmd,"timeout":10}]})
+cfg["hooks"]["SessionStart"].append({"matcher":"*", "hooks":[{"type":"command","command":sess_cmd,"timeout":5}]})
 with open(path, "w") as f:
     json.dump(cfg, f, indent=2)
 PYEOF

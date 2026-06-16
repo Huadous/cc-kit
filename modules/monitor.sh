@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 # monitor.sh — Fast token usage parser for Claude Code session JSONL files
 
-MONITOR_DATA_DIR="${MONITOR_DATA_DIR:-__CC_KIT_DIR__/data}"
+# Self-locate the install root. monitor.sh lives at <root>/modules/, so the
+# install root is one level up. Falls back to $CC_KIT_DIR env var so the
+# user's dev override (set in ~/.bashrc) still works.
+_cc_self="${BASH_SOURCE[0]:-$0}"
+while [ -L "$_cc_self" ]; do _cc_self="$(readlink -f "$_cc_self")"; done
+_cc_self_dir="$(cd "$(dirname "$_cc_self")" && pwd)"
+CC_KIT_DIR="${CC_KIT_DIR:-$_cc_self_dir/..}"
+CC_KIT_DIR="$(cd "$CC_KIT_DIR" && pwd)"
+unset _cc_self _cc_self_dir
+
+MONITOR_DATA_DIR="${MONITOR_DATA_DIR:-$CC_KIT_DIR/data}"
 MONITOR_USAGE_FILE="$MONITOR_DATA_DIR/usage.db"
 
 mkdir -p "$MONITOR_DATA_DIR"

@@ -12,7 +12,15 @@
 set -eu
 [ -n "${BASH_VERSION:-}" ] && set -o pipefail
 
-CC_KIT_DIR="__CC_KIT_DIR__"
+# Self-locate: works whether invoked directly, via symlink, or from a dev checkout.
+# Falls back to $CC_KIT_DIR env var if set so the user's dev override still works.
+_cc_self="${BASH_SOURCE[0]:-$0}"
+while [ -L "$_cc_self" ]; do _cc_self="$(readlink -f "$_cc_self")"; done
+_cc_self_dir="$(cd "$(dirname "$_cc_self")" && pwd)"
+CC_KIT_DIR="${CC_KIT_DIR:-$_cc_self_dir/..}"
+CC_KIT_DIR="$(cd "$CC_KIT_DIR" && pwd)"
+unset _cc_self _cc_self_dir
+
 source "$CC_KIT_DIR/modules/monitor.sh" 2>/dev/null || true
 
 # ── ANSI ────────────────────────────────────────────────────────────
@@ -152,7 +160,7 @@ render_full() {
 }
 
 # ── Mode dispatch (from config file or argument) ────────────────────
-MODE_FILE="__CC_KIT_DIR__/data/.display_mode"
+MODE_FILE="$CC_KIT_DIR/data/.display_mode"
 mode="${1:-}"
 # If no arg, read from saved mode file, fallback to single
 if [[ -z "$mode" ]]; then

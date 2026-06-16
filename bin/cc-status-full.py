@@ -3,7 +3,10 @@
 import os, sys, json, subprocess
 from datetime import datetime
 
-CC_KIT = os.environ.get("CC_KIT_DIR") or "__CC_KIT_DIR__"
+# Self-locate: this script lives at <root>/bin/, so the install root is the parent.
+# Falls back to $CC_KIT_DIR env var if set so the user's dev override still works.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+CC_KIT = os.environ.get("CC_KIT_DIR") or os.path.dirname(_HERE)
 MONITOR = os.path.join(CC_KIT, "modules/monitor.sh")
 
 def run_monitor(fn):
