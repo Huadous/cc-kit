@@ -8,33 +8,26 @@ on:
 
 jobs:
   test:
-    name: lint + test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    name: lint + test (ubuntu)
+    runs-on: ubuntu-latest
+
+    # Why ubuntu-only: cc-kit is developed and tested on Linux (Ubuntu 24.04).
+    # macOS scripts are written defensively (bash 3.2-compatible syntax, no
+    # GNU-only utilities like `stat -c` or `find -printf`, `date -r FILE` for
+    # mtime, etc.) but there is no macOS runner available to the maintainer
+    # for verification. Until that exists, this CI runs Ubuntu only and
+    # macOS compatibility is best-effort — see README.md "Platform support"
+    # for what is and isn't covered.
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install bats
-        run: |
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            brew install bats-core
-          else
-            sudo apt-get update
-            sudo apt-get install -y bats
-          fi
+        run: sudo apt-get install -y bats
 
       - name: Install shellcheck
-        run: |
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
-            brew install shellcheck
-          else
-            sudo apt-get install -y shellcheck
-          fi
+        run: sudo apt-get install -y shellcheck
 
       - name: Install python3
         uses: actions/setup-python@v5
@@ -44,8 +37,6 @@ jobs:
       - name: Install pyflakes
         # Makefile's lint target runs `python3 -m pyflakes bin/*.py`. setup-python
         # only provides the interpreter; pyflakes must be installed explicitly.
-        # We use pip (already available after setup-python) instead of the OS
-        # package manager so the same command works on Ubuntu + macOS runners.
         run: python3 -m pip install pyflakes
 
       - name: Lint
