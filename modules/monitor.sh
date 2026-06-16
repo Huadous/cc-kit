@@ -253,9 +253,13 @@ monitor_cached_balance() {
   local cache_file
   cache_file=$(monitor_balance_cache_file)
   if [[ -f "$cache_file" ]]; then
-    local cache_age now
+    local cache_age now mtime
     now=$(date +%s)
-    cache_age=$(( now - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0) ))
+    # `date -r FILE +%s` works on both GNU coreutils and BSD/macOS date,
+    # unlike `stat -c %Y` (GNU only) / `stat -f %m` (BSD only). Fall back
+    # to 0 if the file vanishes between the [[ -f ]] check and now.
+    mtime=$(date -r "$cache_file" +%s 2>/dev/null || echo 0)
+    cache_age=$(( now - mtime ))
     if [ "$cache_age" -lt 600 ]; then  # 10 min TTL
       cat "$cache_file"
       return
