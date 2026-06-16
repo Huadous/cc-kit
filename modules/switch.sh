@@ -94,7 +94,13 @@ save_secret() {
     if grep -q "^export ${var_name}=" "$SECRETS_FILE" 2>/dev/null; then
       local tmpfile
       tmpfile="$(mktemp)"
-      sed "s/^export ${var_name}=.*/export ${var_name}=\"${key//\//\\/}\"/" "$SECRETS_FILE" > "$tmpfile"
+      # Escape forward slashes for sed's s/.../.../ delimiter. We pipe the
+      # key through sed (rather than using bash's ${key//\//\\/} expansion)
+      # because the latter is bash 4+ syntax; macOS still ships bash 3.2 by
+      # default and we want this to work on Ubuntu (bash 5.x) AND macOS (3.2).
+      local escaped_key
+      escaped_key="$(printf '%s' "$key" | sed 's:/:\\/:g')"
+      sed "s|^export ${var_name}=.*|export ${var_name}=\"${escaped_key}\"|" "$SECRETS_FILE" > "$tmpfile"
       mv "$tmpfile" "$SECRETS_FILE"
     else
       echo "export ${var_name}=\"$key\"" >> "$SECRETS_FILE"
