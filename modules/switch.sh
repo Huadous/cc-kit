@@ -89,30 +89,57 @@ get_saved_key() {
 prompt_secret() {
   local prompt="$1"
   local secret=""
-  local char
 
   printf '%s' "$prompt" >&2
 
-  stty -echo
-  while IFS= read -r -n1 char; do
-    if [[ -z "$char" ]]; then
-      break
-    fi
-    if [[ "$char" == $'\x7f' || "$char" == $'\b' ]]; then
-      if [[ -n "$secret" ]]; then
-        secret="${secret%?}"
-        printf '\b \b' >&2
+  # Two read paths, picked by environment:
+  #
+  # 1. stdin is a TTY (interactive terminal)
+  #    → masked char-by-char prompt with stty echo control
+  #
+  # 2. stdin is not a TTY (e.g. `printf KEY | cc-switch ...`,
+  #    or Claude Code `! cc-switch` which gives an empty pipe)
+  #    → silent line read with `read -r -s`. Works in both
+  #    pipe-with-data and pipe-empty cases; the latter will leave
+  #    $secret empty and we error with a clear message below.
+  #
+  # Note: we deliberately do NOT fall back to /dev/tty. Claude Code's
+  # `!` commands run with no controlling terminal, so /dev/tty opens
+  # with ENXIO. Worse, `[ -r /dev/tty ]` returns true even when the
+  # open would fail — using it as a guard is misleading.
+  if [ -t 0 ]; then
+    local char
+    stty -echo
+    while IFS= read -r -n1 char; do
+      if [[ -z "$char" ]]; then
+        break
       fi
-      continue
-    fi
-    secret+="$char"
-    printf '*' >&2
-  done
-  stty echo
-  printf '\n' >&2
+      if [[ "$char" == $'\x7f' || "$char" == $'\b' ]]; then
+        if [[ -n "$secret" ]]; then
+          secret="${secret%?}"
+          printf '\b \b' >&2
+        fi
+        continue
+      fi
+      secret+="$char"
+      printf '*' >&2
+    done
+    stty echo
+    printf '\n' >&2
+  else
+    # Non-interactive: read whatever's on stdin, silently. If stdin
+    # is empty (Claude Code `! cc-switch`), $secret will be empty
+    # and the message below tells the user how to provide the key.
+    read -r -s secret <&0 || true
+    printf '\n' >&2
+  fi
 
   if [[ -z "$secret" ]]; then
     echo "API key cannot be empty." >&2
+    echo "Set the API key via one of:" >&2
+    echo "  export MINIMAX_API_KEY='...your-key...'" >&2
+    echo "  printf '%s' '...your-key...' | cc-switch minimax" >&2
+    echo "Or run cc-switch from a real terminal." >&2
     return 1
   fi
   printf '%s' "$secret"

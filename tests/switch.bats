@@ -115,3 +115,25 @@ teardown() {
     result=$(get_saved_key "deepseek")
     [ "$result" = "sk-new-9876543210" ]
 }
+
+@test "prompt_secret: reads from piped stdin (non-TTY)" {
+    # Regression: ! cc-switch from Claude Code runs in non-TTY
+    # subprocess. Old code used stty + char-by-char read which
+    # silently returned empty.
+    run bash -c "source '$BATS_TEST_DIRNAME/../modules/switch.sh' && \
+                 printf 'sk-piped-12345678' | prompt_secret 'Enter: '"
+    [ "$status" -eq 0 ]
+    # $output merges stdout+stderr in bats; the secret is the last line.
+    [ "${lines[-1]}" = "sk-piped-12345678" ]
+}
+
+@test "prompt_secret: empty non-TTY stdin errors clearly" {
+    # Regression: Claude Code `! cc-switch` provides empty stdin
+    # with no TTY. Should fail with a helpful message, not silent.
+    run bash -c "source '$BATS_TEST_DIRNAME/../modules/switch.sh' && \
+                 prompt_secret 'Enter: ' </dev/null"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"API key cannot be empty"* ]]
+    [[ "$output" == *"MINIMAX_API_KEY"* ]]
+    [[ "$output" == *"real terminal"* ]]
+}
