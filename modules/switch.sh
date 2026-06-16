@@ -19,7 +19,10 @@ unset _cc_self _cc_self_dir
 CONFIG_FILE="$CC_KIT_DIR/data/provider.env"
 CONFIG_FILE="$CC_KIT_DIR/data/provider.env"
 SECRETS_FILE="$CC_KIT_DIR/data/secrets.env"
-BASHRC_FILE="$HOME/.bashrc"
+# Honor BASHRC_FILE from the environment so bats tests can redirect the
+# "user bashrc" into a private temp file. Without this fallback, ensure_bashrc_source
+# would pollute the developer's real ~/.bashrc every time tests run.
+BASHRC_FILE="${BASHRC_FILE:-$HOME/.bashrc}"
 
 mkdir -p "$CC_KIT_DIR"
 

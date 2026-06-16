@@ -104,7 +104,10 @@ teardown() {
 @test "ensure_bashrc_source: adds marker block once" {
     ensure_bashrc_source
     ensure_bashrc_source  # idempotent
-    count=$(grep -c "BEGIN cc-kit" "$BASHRC_FILE" 2>/dev/null || echo 0)
+    # ensure_bashrc_source writes a header comment '# cc-kit — Claude Code
+    # provider switcher' followed by an if/source/fi block. Check that the
+    # header appears exactly once after two calls (idempotent).
+    count=$(grep -cF "# cc-kit — Claude Code provider switcher" "$BASHRC_FILE" 2>/dev/null || echo 0)
     [ "$count" = "1" ]
 }
 
