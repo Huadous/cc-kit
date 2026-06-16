@@ -241,3 +241,40 @@ EOF
     result=$(monitor_coding_plan_remaining "91%  5h:0h42m  wk:100%" "")
     [ "$result" = "42m" ]
 }
+
+@test "monitor_balance_label: coding-plan format with currency + remaining" {
+    TMPDIR=$(mktemp -d)
+    cat > "$TMPDIR/cache" <<'EOF'
+91%  5h:4h02m  wk:100%
+EOF
+    result=$(monitor_balance_label "91%  5h:4h02m  wk:100%" "¥" "$TMPDIR/cache")
+    [ "$result" = "¥91%  4h02m" ]
+    rm -rf "$TMPDIR"
+}
+
+@test "monitor_balance_label: pay-as-you-go format" {
+    result=$(monitor_balance_label "30.77 CNY" "¥")
+    [ "$result" = "¥30.77 CNY" ]
+}
+
+@test "monitor_balance_label: empty when no balance" {
+    result=$(monitor_balance_label "" "¥")
+    [ -z "$result" ]
+}
+
+@test "monitor_balance_label: empty when balance is 0.00" {
+    result=$(monitor_balance_label "0.00" "¥")
+    [ -z "$result" ]
+}
+
+@test "monitor_balance_label: coding-plan falls back to 5h when no remaining fragment" {
+    # Older cache format: just "91%  wk:100%" without a 5h:HHhMMm fragment
+    result=$(monitor_balance_label "91%  wk:100%" "¥")
+    [ "$result" = "¥91% 5h" ]
+}
+
+@test "monitor_balance_label: respects currency override" {
+    # Pay-as-you-go with $ override
+    result=$(monitor_balance_label "10.00 USD" "\$")
+    [ "$result" = "\$10.00 USD" ]
+}

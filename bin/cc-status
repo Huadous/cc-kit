@@ -70,7 +70,7 @@ hit_g=$(monitor_global_hit_rate 2>/dev/null || echo "")
 cost_s=$(monitor_session_cost 2>/dev/null || echo "")
 cost_g=$(monitor_global_cost 2>/dev/null || echo "")
 cur=$(monitor_currency 2>/dev/null || echo '$')
-bal=$(monitor_cached_balance 2>/dev/null | awk '{print $1}' || echo "")
+bal=$(monitor_cached_balance 2>/dev/null || echo "")
 
 in_fmt=$(monitor_fmt_num "$in_tok")
 out_fmt=$(monitor_fmt_num "$out_tok")
@@ -107,31 +107,23 @@ fi
 # ── Balance ─────────────────────────────────────────────────────────
 # Two shapes:  "30.77 CNY" (DeepSeek pay-as-you-go)
 #              "96%  5h:4h02m  wk:100%"  (MiniMax coding plan)
+# monitor_balance_label is the single source of truth so the session-start
+# banner and the status line can never drift.
 bal_label=""
-if [[ -n "$bal" ]]; then
+balance_text=$(monitor_balance_label "$bal" "$cur" "$CC_KIT_DIR/data/.balance_cache")
+if [[ -n "$balance_text" ]]; then
+  # Apply color by interval pct (coding plan) or by amount (pay-as-you-go).
+  bc="$GREEN"
   if [[ "$bal" == *%* ]]; then
-    # Coding plan: color by interval percent
     interval_pct=$(echo "$bal" | grep -oE '^[0-9]+%' | tr -d '%')
-    bc="$GREEN"
     [[ -n "$interval_pct" ]] && (( interval_pct < 20 )) && bc="$RED"
     [[ -n "$interval_pct" ]] && (( interval_pct >= 20 && interval_pct < 50 )) && bc="$YELLOW"
-    # Show the actual remaining time in the 5h window (e.g. "4h02m")
-    # instead of just the literal "5h" label. Falls back to the old
-    # "5h" label if the cache doesn't carry a remaining-time fragment
-    # (e.g. an older cache format from a pre-v0.1.2 install).
-    remaining=$(monitor_coding_plan_remaining "$bal" "$CC_KIT_DIR/data/.balance_cache")
-    if [[ -n "$remaining" ]]; then
-      bal_label="${bc}${interval_pct}%  ${remaining}${R}"
-    else
-      bal_label="${bc}${interval_pct}% 5h${R}"
-    fi
-  elif [[ "$bal" != "0.00" ]]; then
+  else
     bn=$(echo "$bal" | sed 's/[^0-9.]//g')
-    bc="$GREEN"
     (( $(echo "$bn < 10" | bc -l 2>/dev/null) )) && bc="$RED"
     (( $(echo "$bn >= 10 && $bn < 30" | bc -l 2>/dev/null) )) && bc="$YELLOW"
-    bal_label="${bc}${cur}${bal}${R}"
   fi
+  bal_label="${bc}${balance_text}${R}"
 fi
 
 # ── Hit rate ────────────────────────────────────────────────────────

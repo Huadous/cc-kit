@@ -27,14 +27,20 @@ unset _cc_self _cc_self_dir _cc_auto_root _cc_resolved
 source "$CC_KIT_DIR/modules/monitor.sh" 2>/dev/null || exit 0
 
 label=$(monitor_provider_label 2>/dev/null || echo "CC")
-bal=$(monitor_cached_balance 2>/dev/null | awk '{print $1}' || echo "")
+bal=$(monitor_cached_balance 2>/dev/null || echo "")
 cur=$(monitor_currency 2>/dev/null || echo '$')
 mode=$(cat "$CC_KIT_DIR/data/.display_mode" 2>/dev/null || echo "full")
+
+# Build a compact balance label that mirrors what cc-status shows, so the
+# banner and the status line stay in sync. monitor_balance_label is the
+# single source of truth — same helper used by bin/cc-status.
+bal_display=$(monitor_balance_label "$bal" "$cur" "$CC_KIT_DIR/data/.balance_cache")
+[[ -z "$bal_display" ]] && bal_display="${cur}—"
 
 cat <<EOF
 
 
-  ◈  cc-kit active   │   ${label}   │   ${cur}${bal:-—} balance   │   mode: ${mode}
+  ◈  cc-kit active   │   ${label}   │   ${bal_display} balance   │   mode: ${mode}
 
   Commands:  /cc-help  (help)  ·  /cc-switch  (change model)  ·  !cc-balance  (refresh balance)
 

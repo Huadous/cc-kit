@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-06-17
+
+### Fixed
+- **Status-line refresh actually shows up**: v0.1.2's `monitor_coding_plan_remaining`
+  helper was correctly added to `monitor.sh` and consumed by `cc-status`, but the
+  SessionStart hook banner and `cc-status` were both still stripping the cached
+  balance down to its first whitespace-separated field (`awk '{print $1}'`),
+  which for the MiniMax coding-plan format `"85%  5h:4h01m  wk:100%"` left only
+  `"85%"` for the helper to chew on. With no `5h:HHhMMm` fragment, the helper
+  always returned empty, so the user saw the static `5h` fallback label
+  forever — same as the pre-v0.1.2 behavior. Removed the awk truncation; both
+  paths now pass the full cached string to the helper.
+- **Refactor: balance rendering moved to a single helper**. `monitor_balance_label`
+  in `modules/monitor.sh` is now the one place that turns a cached balance
+  string into a renderable label. `bin/cc-status` and `hooks/session-start.sh`
+  both call it, so the banner and the status line can't drift again.
+
 ## [0.1.2] - 2026-06-17
 
 ### Added
@@ -131,7 +148,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Balance query: DeepSeek account, MiniMax coding-plan quota
 - SessionStart / Stop hooks
 
-[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.0

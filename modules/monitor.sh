@@ -361,6 +361,40 @@ monitor_coding_plan_fmt() {
   fi
 }
 
+# Render the full balance label (currency + amount / pct + remaining time)
+# from a cached balance value. Two shapes:
+#   "30.77 CNY" (DeepSeek pay-as-you-go)        → "¥30.77"
+#   "91%  5h:4h02m  wk:100%" (MiniMax coding plan) → "¥91%  4h02m"
+# Falls back to:
+#   "¥91% 5h" when the cache has the coding-plan pct shape but lacks a
+#   remaining-time fragment (older cache format from a pre-v0.1.2 install).
+#   "" (empty) when there's no cache at all.
+# Single source of truth so cc-status and the session-start banner can't
+# drift.
+monitor_balance_label() {
+  local bal="${1:-}"
+  local cur="${2:-$(monitor_currency 2>/dev/null || echo '$')}"
+  if [[ -z "$bal" ]]; then
+    echo ""
+    return
+  fi
+  if [[ "$bal" == *%* ]]; then
+    # Coding plan: show interval pct + 5h remaining time
+    local interval_pct remaining
+    interval_pct=$(printf '%s' "$bal" | grep -oE '^[0-9]+%' | tr -d '%')
+    remaining=$(monitor_coding_plan_remaining "$bal" "${3:-}")
+    if [[ -n "$remaining" ]]; then
+      echo "${cur}${interval_pct}%  ${remaining}"
+    else
+      echo "${cur}${interval_pct}% 5h"
+    fi
+  elif [[ "$bal" != "0.00" ]]; then
+    echo "${cur}${bal}"
+  else
+    echo ""
+  fi
+}
+
 # Record session to usage.db (called by Stop hook)
 monitor_record() {
   local jsonl_file stats input output cache_read cache_create
