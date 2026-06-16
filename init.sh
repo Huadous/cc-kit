@@ -5,13 +5,29 @@
 # from a symlink, or from a dev checkout (~/.projects/cc-kit).
 # Honors $CC_KIT_ROOT env var if set so the user's dev override still works.
 
-# Resolve our own location
+# Resolve our own location. init.sh lives at the install root, so its dir
+# IS the root. Falls back to $CC_KIT_ROOT env var (for dev override) but
+# warns to stderr on mismatch or bad path — silent overrides were the root
+# cause of a real user outage.
 _cc_self="${BASH_SOURCE[0]:-$0}"
 while [ -L "$_cc_self" ]; do _cc_self="$(readlink -f "$_cc_self")"; done
 _cc_self_dir="$(cd "$(dirname "$_cc_self")" && pwd)"
-# init.sh lives at the install root, so its directory IS the install root
-export CC_KIT_ROOT="${CC_KIT_ROOT:-$_cc_self_dir}"
-unset _cc_self _cc_self_dir
+_cc_auto_root="$_cc_self_dir"
+if [ -n "${CC_KIT_ROOT:-}" ]; then
+  _cc_resolved="$(cd "$CC_KIT_ROOT" 2>/dev/null && pwd)"
+  if [ -z "$_cc_resolved" ]; then
+    echo "cc-kit: WARNING: CC_KIT_ROOT=$CC_KIT_ROOT is not accessible; falling back to auto-detected ($_cc_auto_root)" >&2
+    export CC_KIT_ROOT="$_cc_auto_root"
+  elif [ "$_cc_resolved" != "$_cc_auto_root" ]; then
+    echo "cc-kit: WARNING: CC_KIT_ROOT=$_cc_resolved overrides auto-detected ($_cc_auto_root)" >&2
+    export CC_KIT_ROOT="$_cc_resolved"
+  else
+    export CC_KIT_ROOT="$_cc_resolved"
+  fi
+else
+  export CC_KIT_ROOT="$_cc_auto_root"
+fi
+unset _cc_self _cc_self_dir _cc_auto_root _cc_resolved
 
 # Load module functions
 for mod in monitor switch; do

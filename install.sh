@@ -34,10 +34,28 @@ fi
 # ── Resolve install path ────────────────────────────────────────────
 CC_KIT_ROOT="${CC_KIT_ROOT:-$HOME/.cc-kit}"
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
-BASHRC_FILE="$HOME/.bashrc"
+# Pick the user's actual shell rc file. macOS default is zsh; writing to
+# .bashrc there means cc-kit is silently never initialized. Fall back to
+# .bashrc for unknown shells.
+case "${SHELL:-}" in
+  */zsh) BASHRC_FILE="${ZDOTDIR:-$HOME}/.zshrc" ;;
+  *)     BASHRC_FILE="$HOME/.bashrc" ;;
+esac
 SETTINGS_FILE="$HOME/.claude/settings.json"
 LOCAL_BIN="$HOME/.local/bin"
 BACKUP_DIR="$CC_KIT_ROOT/.backup"
+
+# Warn if the user has CC_KIT_DIR / CC_KIT_ROOT exports in their rc file.
+# These silently override cc-kit's self-location and were the root cause
+# of a real user outage (SessionStart hook pointed at a non-existent path).
+for _rc in "$HOME/.bashrc" "$HOME/.zshrc" "${ZDOTDIR:-$HOME}/.zshrc"; do
+  if [[ -f "$_rc" ]] && grep -qE '^[^#]*\<export[[:space:]]+(CC_KIT_DIR|CC_KIT_ROOT)=' "$_rc" 2>/dev/null; then
+    echo "  ! Detected CC_KIT_DIR / CC_KIT_ROOT export in $_rc"
+    echo "    This silently overrides cc-kit's auto-detected install path."
+    echo "    If you don't need it for dev work, remove those lines to avoid path mismatches."
+  fi
+done
+unset _rc
 
 echo ""
 echo "  ◈  CC-KIT INSTALLER"
@@ -168,10 +186,16 @@ else
     jq --arg cmd "$CC_KIT_ROOT/bin/cc-status" \
        --arg stop "bash $CC_KIT_ROOT/hooks/stop-record.sh" \
        --arg sess "bash $CC_KIT_ROOT/hooks/session-start.sh" '
+      # Path-boundary-anchored regex: match `/cc-kit/`, `/cc-kit$`,
+      # `/.cc-kit/`, `/.cc-kit$`, and the `^/cc-kit/` start-of-path case,
+      # but NOT substrings like `/mycc-kittens/` or `/.cc-kit-cache/`.
+      # This regex is the source of truth — the python3 fallback below
+      # MUST use the same anchors.
+      def is_cc_kit_path: test("(^|/)cc-kit(/|$)|(^|/)\\.cc-kit(/|$)");
       # Replace statusLine if it points to any cc-kit install path (across
       # all historical CC_KIT_ROOT values: ~/projects/cc-kit, ~/.cc-kit,
       # ~/.cc-kit-test, etc.). Otherwise leave the user'"'"'s custom line alone.
-      if (.statusLine?.command // "") | test("/cc-kit|/\\.cc-kit") then
+      if (.statusLine?.command // "") | is_cc_kit_path then
         .statusLine = {type:"command", command:$cmd, padding:0}
       else . end
       | .statusLineRefreshInterval //= 5
@@ -181,8 +205,8 @@ else
       # Remove ALL matcher entries whose hook command points to any cc-kit
       # install path. This cleans up entries from previous installs/tests
       # even when they used a different CC_KIT_ROOT.
-      | .hooks.Stop          |= [.[] | select((.hooks[]?.command // "") | test("/cc-kit|/\\.cc-kit") | not)]
-      | .hooks.SessionStart |= [.[] | select((.hooks[]?.command // "") | test("/cc-kit|/\\.cc-kit") | not)]
+      | .hooks.Stop          |= [.[] | select((.hooks[]?.command // "") | is_cc_kit_path | not)]
+      | .hooks.SessionStart |= [.[] | select((.hooks[]?.command // "") | is_cc_kit_path | not)]
       # Add fresh entries pointing at the current install dir.
       | .hooks.Stop          += [{matcher:"*", hooks:[{type:"command", command:$stop, timeout:10}]}]
       | .hooks.SessionStart  += [{matcher:"*", hooks:[{type:"command", command:$sess, timeout:5}]}]
@@ -192,13 +216,16 @@ else
     # python3 fallback
     SETTINGS_FILE="$SETTINGS_FILE" CC_KIT_ROOT="$CC_KIT_ROOT" python3 - <<'PYEOF' && echo "  ✓ settings.json updated (via python3)" || echo "  ! failed to update settings.json"
 import json, os, re
+# Same path-boundary-anchored regex as the jq branch above. Keep these
+# in sync — this is the source of truth for "is this a cc-kit path?".
+_CC_KIT_RE = re.compile(r"(^|/)cc-kit(/|$)|(^|/)\.cc-kit(/|$)")
 path = os.environ["SETTINGS_FILE"]
 root = os.environ["CC_KIT_ROOT"]
 with open(path) as f:
     cfg = json.load(f)
 # Replace statusLine only if it points to a cc-kit install (any path).
 sl_cmd = cfg.get("statusLine", {}).get("command", "") if isinstance(cfg.get("statusLine"), dict) else ""
-if re.search(r"/cc-kit|/\.cc-kit", sl_cmd):
+if _CC_KIT_RE.search(sl_cmd):
     cfg["statusLine"] = {"type": "command", "command": f"{root}/bin/cc-status", "padding": 0}
 cfg.setdefault("statusLineRefreshInterval", 5)
 cfg.setdefault("hooks", {})
@@ -206,7 +233,7 @@ cfg["hooks"].setdefault("Stop", [])
 cfg["hooks"].setdefault("SessionStart", [])
 # Remove all matcher entries whose hook command points to a cc-kit install.
 def is_cc_kit(entry):
-    return any(re.search(r"/cc-kit|/\.cc-kit", h.get("command",""))
+    return any(_CC_KIT_RE.search(h.get("command",""))
                for h in entry.get("hooks", []))
 cfg["hooks"]["Stop"]         = [e for e in cfg["hooks"]["Stop"]         if not is_cc_kit(e)]
 cfg["hooks"]["SessionStart"] = [e for e in cfg["hooks"]["SessionStart"] if not is_cc_kit(e)]
@@ -246,18 +273,46 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$LOCAL_BIN"; then
 fi
 
 # ── Step 7: bashrc marker block ────────────────────────────────────
-echo "→ Configuring ~/.bashrc..."
+echo "→ Configuring $BASHRC_FILE..."
 marker="# BEGIN cc-kit"
 endmarker="# END cc-kit"
+# Back up $BASHRC_FILE before any modification so a buggy awk (or any
+# other script-level error) can be recovered. settings.json is already
+# backed up at line ~165; the rc file needs the same safety net.
+if [[ -f "$BASHRC_FILE" ]]; then
+  cp "$BASHRC_FILE" "$BACKUP_DIR/$(basename "$BASHRC_FILE").$(date +%Y%m%d-%H%M%S)"
+fi
 if grep -Fq "$marker" "$BASHRC_FILE" 2>/dev/null; then
-  # Replace existing block
-  tmp=$(mktemp)
-  awk -v m="$marker" -v e="$endmarker" -v body="[ -f \"${CC_KIT_ROOT}/init.sh\" ] && source \"${CC_KIT_ROOT}/init.sh\"" '
-    $0 ~ m { printing=1; print m; print body; next }
-    $0 ~ e { printing=0; print e; next }
-    !printing { print }
-  ' "$BASHRC_FILE" > "$tmp" && mv "$tmp" "$BASHRC_FILE"
-  echo "  ✓ updated existing cc-kit block in $BASHRC_FILE"
+  if grep -Fq "$endmarker" "$BASHRC_FILE" 2>/dev/null; then
+    # Both markers present — safe to use the awk state machine to replace
+    # the block in place. The `next` on BEGIN sets printing=1; we MUST see
+    # the END marker later or printing stays 1 forever and the rest of
+    # the file is silently lost. END block guards against a future bug
+    # that drops the END marker.
+    tmp=$(mktemp)
+    awk -v m="$marker" -v e="$endmarker" -v body="[ -f \"${CC_KIT_ROOT}/init.sh\" ] && source \"${CC_KIT_ROOT}/init.sh\"" '
+      $0 ~ m { printing=1; print m; print body; next }
+      $0 ~ e { printing=0; print e; next }
+      !printing { print }
+      END { if (printing) { print "cc-kit: awk ended with printing=1 (END marker missing in $BASHRC_FILE); aborting" > "/dev/stderr"; exit 1 } }
+    ' "$BASHRC_FILE" > "$tmp" && mv "$tmp" "$BASHRC_FILE" || {
+      echo "  ! awk failed (END marker missing?); preserving $BASHRC_FILE as-is"
+      rm -f "$tmp"
+    }
+    echo "  ✓ updated existing cc-kit block in $BASHRC_FILE"
+  else
+    # BEGIN exists but no matching END — user hand-edited and removed the
+    # END marker. The awk state machine would skip everything after BEGIN
+    # forever, silently truncating the rest of the rc file. Treat the
+    # block as malformed: append a fresh, complete block.
+    echo "  ! existing cc-kit block is missing END marker; appending a fresh complete block"
+    {
+      echo ""
+      echo "$marker"
+      echo "[ -f \"${CC_KIT_ROOT}/init.sh\" ] && source \"${CC_KIT_ROOT}/init.sh\""
+      echo "$endmarker"
+    } >> "$BASHRC_FILE"
+  fi
 else
   {
     echo ""
