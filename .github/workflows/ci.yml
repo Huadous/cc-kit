@@ -41,6 +41,13 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install pyflakes
+        # Makefile's lint target runs `python3 -m pyflakes bin/*.py`. setup-python
+        # only provides the interpreter; pyflakes must be installed explicitly.
+        # We use pip (already available after setup-python) instead of the OS
+        # package manager so the same command works on Ubuntu + macOS runners.
+        run: python3 -m pip install pyflakes
+
       - name: Lint
         run: make lint
 
