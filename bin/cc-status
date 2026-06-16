@@ -115,8 +115,16 @@ if [[ -n "$bal" ]]; then
     bc="$GREEN"
     [[ -n "$interval_pct" ]] && (( interval_pct < 20 )) && bc="$RED"
     [[ -n "$interval_pct" ]] && (( interval_pct >= 20 && interval_pct < 50 )) && bc="$YELLOW"
-    # Compact: just the 5h % — full detail lives in !cc-balance
-    bal_label="${bc}${interval_pct}% 5h${R}"
+    # Show the actual remaining time in the 5h window (e.g. "4h02m")
+    # instead of just the literal "5h" label. Falls back to the old
+    # "5h" label if the cache doesn't carry a remaining-time fragment
+    # (e.g. an older cache format from a pre-v0.1.2 install).
+    remaining=$(monitor_coding_plan_remaining "$bal" "$CC_KIT_DIR/data/.balance_cache")
+    if [[ -n "$remaining" ]]; then
+      bal_label="${bc}${interval_pct}%  ${remaining}${R}"
+    else
+      bal_label="${bc}${interval_pct}% 5h${R}"
+    fi
   elif [[ "$bal" != "0.00" ]]; then
     bn=$(echo "$bal" | sed 's/[^0-9.]//g')
     bc="$GREEN"

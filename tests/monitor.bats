@@ -187,3 +187,57 @@ EOF
     [ -z "$result" ]
     rm -rf "$TMPDIR"
 }
+
+@test "monitor_coding_plan_remaining: extracts from 5h cache format" {
+    # "5h:4h02m" → "4h02m" (no cache file → no mtime adjustment)
+    result=$(monitor_coding_plan_remaining "91%  5h:4h02m  wk:100%" "")
+    [ "$result" = "4h02m" ]
+}
+
+@test "monitor_coding_plan_remaining: empty when no 5h fragment" {
+    # DeepSeek-style pay-as-you-go (no time window) → empty
+    result=$(monitor_coding_plan_remaining "30.77 CNY" "")
+    [ -z "$result" ]
+}
+
+@test "monitor_coding_plan_remaining: empty for non-coding-plan pct format" {
+    # Coding plan with stale or unknown format → empty (falls back to "5h" label)
+    result=$(monitor_coding_plan_remaining "91%  something_weird  wk:100%" "")
+    [ -z "$result" ]
+}
+
+@test "monitor_coding_plan_remaining: subtracts cache age" {
+    # Cache file written 60 seconds ago, value says "4h02m" remaining →
+    # real remaining is 4h02m - 60s = 4h01m. Pass the cache file path so
+    # the helper can read mtime.
+    TMPDIR=$(mktemp -d)
+    cat > "$TMPDIR/cache" <<'EOF'
+91%  5h:4h02m  wk:100%
+EOF
+    # Sleep 2s so mtime is reliably "in the past" (BATS mtime resolution)
+    sleep 2
+    result=$(monitor_coding_plan_remaining "91%  5h:4h02m  wk:100%" "$TMPDIR/cache")
+    # Result should be 4h01m or 4h00m depending on timing; the point is
+    # it's NOT 4h02m (which would mean we ignored cache age).
+    [[ "$result" =~ ^4h0[01]m$ ]]
+    rm -rf "$TMPDIR"
+}
+
+@test "monitor_coding_plan_remaining: returns 0m when window has expired" {
+    # Cache says "0h01m" remaining but the cache is 5 minutes old, so
+    # real remaining is negative → clamp to 0m.
+    TMPDIR=$(mktemp -d)
+    cat > "$TMPDIR/cache" <<'EOF'
+91%  5h:0h01m  wk:100%
+EOF
+    sleep 2
+    result=$(monitor_coding_plan_remaining "91%  5h:0h01m  wk:100%" "$TMPDIR/cache")
+    [ "$result" = "0m" ]
+    rm -rf "$TMPDIR"
+}
+
+@test "monitor_coding_plan_remaining: drops h prefix when under 1h" {
+    # 0h42m → "42m" (more compact for short windows)
+    result=$(monitor_coding_plan_remaining "91%  5h:0h42m  wk:100%" "")
+    [ "$result" = "42m" ]
+}

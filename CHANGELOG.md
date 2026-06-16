@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-17
+
+### Added
+- **Coding-plan remaining time in status line**: the MiniMax coding-plan
+  section (`91%  5h`) now shows the actual time left in the current 5h
+  window instead of the static `5h` label. Two new helpers in
+  `modules/monitor.sh`:
+  - `monitor_coding_plan_remaining` extracts the `5h:HHhMMm` fragment from
+    the cache and subtracts elapsed time since the cache was written,
+    so the value stays up-to-the-minute even when the cache TTL (10 min)
+    hasn't elapsed.
+  - `monitor_coding_plan_fmt` formats seconds as `HhMMm` (drops the `0h`
+    prefix when the window is under 1 hour, so `42m` not `0h42m`).
+  The status line auto-kicks off a background `cc-balance auto` refresh
+  when the cached value has already expired (window reset or very stale
+  cache), so the next render has fresh data without blocking the current
+  one. Falls back gracefully to `5h` for older cache formats.
+
 ## [0.1.1] - 2026-06-17
 
 ### Fixed
@@ -113,7 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Balance query: DeepSeek account, MiniMax coding-plan quota
 - SessionStart / Stop hooks
 
-[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.0
 [0.0.1]: https://github.com/Huadous/cc-kit/releases/tag/v0.0.1

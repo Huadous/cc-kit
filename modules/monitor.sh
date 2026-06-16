@@ -296,6 +296,71 @@ monitor_cached_balance() {
   echo ""
 }
 
+# Extract the MiniMax coding-plan 5h-window remaining time from a cached
+# balance value (the format produced by bin/cc-balance: "5h:HHh:MMm" inside
+# a larger "<pct>%  5h:HHhMMm  wk:NN%" string). Adjusts for elapsed time
+# since the cache was written so the value is up-to-the-minute, not up to
+# 10 min stale (the cache TTL in monitor_cached_balance). Returns just the
+# duration in compact form ("4h02m", "42m", "0m") or empty if not present.
+#
+# Args:
+#   $1 — cached balance value (e.g. "91%  5h:4h02m  wk:100%")
+#   $2 — path to the balance cache file (for mtime adjustment); optional
+monitor_coding_plan_remaining() {
+  local bal="$1"
+  local cache_file="${2:-}"
+  # Extract the "5h:HHhMMm" fragment; head -1 in case of multiple matches.
+  local fragment
+  fragment=$(printf '%s' "$bal" | grep -oE '5h:[0-9]+h[0-9]+m' | head -1)
+  if [[ -z "$fragment" ]]; then
+    echo ""
+    return
+  fi
+  local cached_remaining="${fragment#5h:}"  # strip "5h:" prefix
+  # Parse the snapshot into seconds so we can both reformat (drop 0h)
+  # and adjust for cache age.
+  local h m total_s
+  h=$(printf '%s' "$cached_remaining" | grep -oE '^[0-9]+h' | tr -d 'h')
+  m=$(printf '%s' "$cached_remaining" | grep -oE '[0-9]+m$' | tr -d 'm')
+  h="${h:-0}"; m="${m:-0}"
+  total_s=$(( h*3600 + m*60 ))
+  # If we don't have a cache file, use the snapshot as-is.
+  if [[ -z "$cache_file" || ! -f "$cache_file" ]]; then
+    monitor_coding_plan_fmt "$total_s"
+    return
+  fi
+  # Subtract elapsed time since the cache was written.
+  local now mtime age_s remaining_s
+  now=$(date +%s)
+  mtime=$(date -r "$cache_file" +%s 2>/dev/null || echo 0)
+  age_s=$(( now - mtime ))
+  remaining_s=$(( total_s - age_s ))
+  if [ "$remaining_s" -le 0 ]; then
+    # Either the 5h window just reset, or the cache is so old it's no
+    # longer meaningful. Force a refresh in the background so the next
+    # statusLine render has a fresh value, and return "0m" for now.
+    if [ -x "${CC_KIT_DIR:-}/bin/cc-balance" ]; then
+      ( "${CC_KIT_DIR}/bin/cc-balance" auto >/dev/null 2>&1 & )
+    fi
+    echo "0m"
+    return
+  fi
+  monitor_coding_plan_fmt "$remaining_s"
+}
+
+# Internal: format a remaining-seconds value as "HhMMm" (drops the "0h" when
+# the hours component is zero, so 42 minutes renders as "42m" not "0h42m").
+monitor_coding_plan_fmt() {
+  local total_s="$1"
+  local h=$(( total_s / 3600 ))
+  local m=$(( (total_s % 3600) / 60 ))
+  if [ "$h" -gt 0 ]; then
+    echo "${h}h$(printf '%02d' "$m")m"
+  else
+    echo "${m}m"
+  fi
+}
+
 # Record session to usage.db (called by Stop hook)
 monitor_record() {
   local jsonl_file stats input output cache_read cache_create
