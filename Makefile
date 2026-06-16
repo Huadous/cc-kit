@@ -54,7 +54,7 @@ check-installed:
 
 test:
 	@echo "→ running bats tests..."
-	@bats tests/ 2>&1 || (echo "bats not installed? try: brew install bats-core"; exit 1)
+	@bats --print-output-on-failure tests/ 2>&1 || (echo "bats not installed? try: brew install bats-core"; exit 1)
 
 install-local:
 	@echo "→ installing to $(CC_KIT_ROOT) (test path)..."
