@@ -7,8 +7,6 @@ Uses the Blessed library for professional terminal rendering.
 import os
 import sys
 import time
-import subprocess
-import json
 from datetime import datetime
 
 try:

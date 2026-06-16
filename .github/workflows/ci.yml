@@ -47,11 +47,16 @@ jobs:
       - name: Test
         run: make test
 
-      - name: Placeholder check
+      - name: Placeholder check (installed copy)
         run: |
+          # Source files legitimately contain __CC_KIT_DIR__ placeholders;
+          # the install script substitutes them. We verify the *installed*
+          # copy is fully substituted.
+          make install-local
           if grep -rln '__CC_KIT_DIR__\|__CC_KIT_ROOT__\|~/projects/cc-kit' \
-              bin/ modules/ hooks/ init.sh 2>/dev/null; then
-            echo "ERROR: unsubstituted placeholders found"
+              "$HOME/.cc-kit-test/bin" "$HOME/.cc-kit-test/modules" \
+              "$HOME/.cc-kit-test/hooks" "$HOME/.cc-kit-test/init.sh" 2>/dev/null; then
+            echo "ERROR: unsubstituted placeholders found in installed copy"
             exit 1
           fi
-          echo "✓ all placeholders substituted"
+          echo "✓ installed copy has no remaining placeholders"

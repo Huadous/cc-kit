@@ -23,12 +23,27 @@ lint:
 	@echo "→ bash syntax..."
 	@bash -n install.sh init.sh uninstall.sh
 	@for f in bin/* hooks/* modules/*; do bash -n "$$f" 2>/dev/null || true; done
-	@echo "→ placeholder check..."
-	@if grep -rln '__CC_KIT_DIR__\|__CC_KIT_ROOT__\|~/projects/cc-kit' \
-	    bin/ modules/ hooks/ init.sh 2>/dev/null; then \
-	  echo "ERROR: unsubstituted placeholders found"; exit 1; \
-	fi
+	@echo "→ source files SHOULD contain placeholders (sanity):"
+	@found=$$(grep -rln '__CC_KIT_DIR__\|__CC_KIT_ROOT__' \
+	    bin/ modules/ hooks/ init.sh 2>/dev/null | wc -l); \
+	  if [ "$$found" -lt 5 ]; then \
+	    echo "ERROR: expected __CC_KIT_DIR__ placeholders in source files, only found $$found"; exit 1; \
+	  else \
+	    echo "  ✓ $$found source files have placeholders (will be substituted at install)"; \
+	  fi
 	@echo "✓ all checks passed"
+
+check-installed:
+	@echo "→ checking installed copy at $(CC_KIT_ROOT) for unsubstituted placeholders..."
+	@if [ ! -d "$(CC_KIT_ROOT)" ]; then \
+	  echo "  ! $(CC_KIT_ROOT) does not exist; run 'make install-local' first"; exit 0; \
+	fi
+	@if grep -rln '__CC_KIT_DIR__\|__CC_KIT_ROOT__\|~/projects/cc-kit' \
+	    $(CC_KIT_ROOT)/bin $(CC_KIT_ROOT)/modules $(CC_KIT_ROOT)/hooks $(CC_KIT_ROOT)/init.sh 2>/dev/null; then \
+	  echo "ERROR: unsubstituted placeholders found in installed copy"; exit 1; \
+	else \
+	  echo "  ✓ installed copy has no remaining placeholders"; \
+	fi
 
 test:
 	@echo "→ running bats tests..."

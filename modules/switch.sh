@@ -130,7 +130,7 @@ prompt_secret() {
     # Non-interactive: read whatever's on stdin, silently. If stdin
     # is empty (Claude Code `! cc-switch`), $secret will be empty
     # and the message below tells the user how to provide the key.
-    read -r -s secret <&0 || true
+    read -r -s secret || true
     printf '\n' >&2
   fi
 
