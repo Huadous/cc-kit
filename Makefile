@@ -58,6 +58,14 @@ test:
 
 install-local:
 	@echo "→ installing to $(CC_KIT_ROOT) (test path)..."
+	# Snapshot the user's real settings.json so install.sh's settings merge
+	# doesn't pollute it with the test CC_KIT_ROOT path. install.sh updates
+	# settings.json unconditionally; for CI we only care that the install
+	# itself succeeds, not that the real settings got rewritten.
+	@if [ -f "$(HOME)/.claude/settings.json" ]; then \
+	  cp "$(HOME)/.claude/settings.json" "$(HOME)/.claude/settings.json.cc-kit-test-bak" && \
+	  trap 'mv -f "$(HOME)/.claude/settings.json.cc-kit-test-bak" "$(HOME)/.claude/settings.json"' EXIT; \
+	fi
 	CC_KIT_ROOT=$(CC_KIT_ROOT) $(SRC)/install.sh
 
 clean:
