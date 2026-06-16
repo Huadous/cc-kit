@@ -46,8 +46,16 @@ monitor_find_session() {
     fi
   fi
 
-  # Fallback: newest jsonl across all projects
-  find "$HOME/.claude/projects" -name '*.jsonl' -type f -printf '%T@ %p\n' 2>/dev/null \
+  # Fallback: newest jsonl across all projects. Use `find ... -exec stat` so
+  # the mtime lookup works on both GNU (stat -c %Y) and BSD/macOS (stat -f %m).
+  # GNU find's `-printf '%T@'` is shorter but BSD find doesn't have `-printf`.
+  find "$HOME/.claude/projects" -name '*.jsonl' -type f 2>/dev/null \
+    | while IFS= read -r f; do
+        # Print "<mtime_epoch> <path>" for sorting; mtime command picks the
+        # portable form (works on Linux + macOS).
+        mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)
+        printf '%s %s\n' "$mtime" "$f"
+      done \
     | sort -nr | head -1 | cut -d' ' -f2-
 }
 
