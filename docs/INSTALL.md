@@ -32,7 +32,7 @@ failures — fix the first one and re-run.
 
 | Check | Fix |
 |---|---|
-| `bash ≥ 4` | macOS users: `brew install bash` and add to `/etc/shells`, then `chsh -s /opt/homebrew/bin/bash` |
+| `bash ≥ 3.2` | macOS 3.2 is fine — no upgrade needed. If you want bash 5 for your own use, `brew install bash` and `chsh -s /opt/homebrew/bin/bash` |
 | `python3 ≥ 3.8` | macOS users: `brew install python@3.11` |
 | `curl` | `apt install curl` / `brew install curl` |
 | `bc` | `apt install bc` / `brew install bc` |
@@ -55,9 +55,15 @@ brew install grep
 export PATH="/opt/homebrew/opt/grep/libexec/gnubin:$PATH"
 ```
 
-### bash 3.2 is the macOS default
+### bash 3.2 is the macOS default — and that's fine
 
-Anthropic's Claude Code requires bash ≥ 4. Install via Homebrew:
+As of v0.1.x, cc-kit's scripts are written to be bash 3.2 compatible:
+- No `${var//pat/rep}` or `${var,,}` (use sed/awk for transformations)
+- No `stat -c %Y` (use `date -r FILE +%s` which works on both)
+- No `find -printf` (use `find ... | while read f; do stat ...; done`)
+- All here-strings (`<<<`), `[[ ]]`, `(( ))`, `local`, command substitution are bash 2+ features that 3.2 supports
+
+If you still want bash 5 for your interactive shell, install via Homebrew:
 
 ```bash
 brew install bash
@@ -66,7 +72,7 @@ echo /opt/homebrew/bin/bash | sudo tee -a /etc/shells
 chsh -s /opt/homebrew/bin/bash
 ```
 
-Then open a new terminal and re-run `./install.sh`.
+But this is **not required for cc-kit** — install.sh and all the scripts work as-is on macOS bash 3.2.
 
 ---
 
@@ -124,8 +130,11 @@ overwrite** (per spec §2.2). Manually merge the two configs.
 CC_KIT_ROOT=~/my/custom/path ./install.sh
 ```
 
-The placeholder `__CC_KIT_DIR__` in all scripts is replaced with this path.
-The `~/.bashrc` block is rewritten to match.
+Scripts compute their own install root at runtime via `BASH_SOURCE[0]` (see
+`modules/switch.sh` and `init.sh`), so no placeholder substitution happens
+during install — the `CC_KIT_ROOT` you pass is just where the source tree
+gets copied to. The `~/.bashrc` block is rewritten to `source` the
+config from the install path you chose.
 
 To uninstall from a custom path:
 

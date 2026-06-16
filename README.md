@@ -26,7 +26,7 @@ No telemetry. No cloud. Your data stays on your machine.
 
 ## Quick start
 
-Requires `bash ≥ 4` and `python3 ≥ 3.8`. Everything else is pre-installed on
+Requires `bash ≥ 3.2` and `python3 ≥ 3.8`. Everything else is pre-installed on
 modern macOS / Ubuntu.
 
 ```bash
@@ -111,10 +111,22 @@ See [docs/](docs/) for details.
 
 ---
 
+## Platform support
+
+| OS | Bash | Status |
+|---|---|---|
+| **Ubuntu 24.04** (and most modern Linux) | bash 5.x | ✅ Fully tested in CI (lint + 39 bats tests + install smoke test on every push) |
+| **Ubuntu 20.04 / 22.04 / Debian** | bash 4.x / 5.x | ✅ Should work — no GNU-only utilities in hot paths |
+| **macOS 14 Sonoma / 15 Sequoia** | bash 3.2 (Apple's default) | ⚠️ Best-effort — scripts are written defensively (no `${var//pat/rep}`, no `stat -c`, no `find -printf`, `date -r FILE` instead of `stat -c %Y`) but no CI runner is available to the maintainer to verify every path. **If you hit an issue on macOS, please open an issue with the output of `bash -x ./install.sh` and the failing command.** |
+
+If you specifically need macOS CI coverage, see [`docs/INSTALL.md`](docs/INSTALL.md#macos-specifics) for the full list of intentional portability workarounds and [`CONTRIBUTING.md`](docs/CONTRIBUTING.md) for how to add a macOS verification path (a maintainer with a Mac is the only way to make this green).
+
+---
+
 ## Installation troubleshooting
 
 If you hit issues, see [docs/INSTALL.md](docs/INSTALL.md) for:
-- bash 4 vs macOS 3.2
+- bash 3.2 vs bash 5 (cc-kit works on both — no need to upgrade)
 - BSD grep vs GNU grep
 - PATH not picking up `~/.local/bin`
 - Manual `settings.json` edit
