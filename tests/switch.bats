@@ -95,7 +95,7 @@ teardown() {
     cc-switch glm 4.7 >/dev/null 2>&1
     grep -q 'ANTHROPIC_BASE_URL="https://open.bigmodel.cn/api/anthropic"' "$CONFIG_FILE"
     grep -q 'ANTHROPIC_MODEL="glm-4.7"' "$CONFIG_FILE"
-    grep -q 'CLAUDE_CODE_SUBAGENT_MODEL="glm-4.7-flash"' "$CONFIG_FILE"
+    grep -q 'CLAUDE_CODE_SUBAGENT_MODEL="glm-4.7"' "$CONFIG_FILE"
 }
 
 @test "cc-switch glm 5.1 writes glm-5.1" {

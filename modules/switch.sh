@@ -251,10 +251,10 @@ cc-switch() {
       ;;
     glm)
       case "${model:-4.7}" in
-        5.2|5-2)   main_model="glm-5.2";       sub_model="glm-4.7-flash"; model_label="5.2" ;;
-        5.1|5-1)   main_model="glm-5.1";       sub_model="glm-4.7-flash"; model_label="5.1" ;;
-        4.7|4-7)   main_model="glm-4.7";       sub_model="glm-4.7-flash"; model_label="4.7" ;;
-        flash)     main_model="glm-4.7-flash";  sub_model="glm-4.7-flash"; model_label="flash" ;;
+        5.2|5-2)   main_model="glm-5.2";   sub_model="glm-4.7";  model_label="5.2" ;;
+        5.1|5-1)   main_model="glm-5.1";   sub_model="glm-4.7";  model_label="5.1" ;;
+        4.7|4-7)   main_model="glm-4.7";   sub_model="glm-4.7";  model_label="4.7" ;;
+        flash)     main_model="glm-4.7-flash"; sub_model="glm-4.7-flash"; model_label="flash" ;;
       esac
       ;;
   esac
