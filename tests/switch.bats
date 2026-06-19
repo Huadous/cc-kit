@@ -90,6 +90,26 @@ teardown() {
     grep -q 'ANTHROPIC_MODEL="MiniMax-M2.7-highspeed"' "$CONFIG_FILE"
 }
 
+@test "cc-switch glm 4.7 writes glm-4.7" {
+    save_secret "glm" "sk-test-glm-1234567890"
+    cc-switch glm 4.7 >/dev/null 2>&1
+    grep -q 'ANTHROPIC_BASE_URL="https://open.bigmodel.cn/api/anthropic"' "$CONFIG_FILE"
+    grep -q 'ANTHROPIC_MODEL="glm-4.7"' "$CONFIG_FILE"
+    grep -q 'CLAUDE_CODE_SUBAGENT_MODEL="glm-4.7-flash"' "$CONFIG_FILE"
+}
+
+@test "cc-switch glm 5.1 writes glm-5.1" {
+    save_secret "glm" "sk-test-glm-1234567890"
+    cc-switch glm 5.1 >/dev/null 2>&1
+    grep -q 'ANTHROPIC_MODEL="glm-5.1"' "$CONFIG_FILE"
+}
+
+@test "cc-switch glm flash writes glm-4.7-flash" {
+    save_secret "glm" "sk-test-glm-1234567890"
+    cc-switch glm flash >/dev/null 2>&1
+    grep -q 'ANTHROPIC_MODEL="glm-4.7-flash"' "$CONFIG_FILE"
+}
+
 @test "cc-switch anthropic unsets env vars" {
     cc-switch anthropic >/dev/null 2>&1
     grep -q '^unset ANTHROPIC_BASE_URL' "$CONFIG_FILE"

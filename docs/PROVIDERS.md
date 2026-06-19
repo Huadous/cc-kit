@@ -1,6 +1,6 @@
 # Provider configuration
 
-cc-kit ships with three providers. Each has its own pricing, limits, and
+cc-kit ships with four providers. Each has its own pricing, limits, and
 quirks.
 
 ## Quick reference
@@ -9,6 +9,7 @@ quirks.
 |---|---|---|---|---|
 | [DeepSeek](#deepseek) | https://platform.deepseek.com | No (pay-as-you-go) | ¥ | pro, flash |
 | [MiniMax](#minimax) | https://platform.MiniMax.io | **Yes** — 5h + weekly windows | ¥ | M2.7, M3, highspeed |
+| [GLM / Zhipu](#glm) | https://open.bigmodel.cn | **Yes** — 5h + weekly windows | ¥ | 5.1, 4.7, flash |
 | [Anthropic](#anthropic) | https://console.anthropic.com | No (pay-as-you-go) | $ | opus, sonnet, haiku |
 
 ---
@@ -82,6 +83,50 @@ cc-switch minimax highspeed  # fastest M2.7 variant
 ```bash
 cc-balance
 # Output: 91%  5h:3h41m  wk:100%
+#         ^ 5h window remaining%  ^ time until reset  ^ weekly remaining%
+```
+
+---
+
+## GLM (Zhipu AI)
+
+**Endpoint:** `https://open.bigmodel.cn/api/anthropic`
+
+GLM (智谱 AI) supports both pay-as-you-go and coding plan. cc-kit uses the
+Anthropic-compatible endpoint — the same protocol DeepSeek and MiniMax
+implement.
+
+**Pricing** (per 1M tokens, RMB):
+
+| Model | Input | Cache read | Output |
+|---|---|---|---|
+| `glm-5.1` (<32K input) | ¥6.00 | ¥1.30 | ¥24.00 |
+| `glm-5.1` (≥32K input) | ¥8.00 | ¥2.00 | ¥28.00 |
+| `glm-4.7` (<32K input) | ¥2.00 | ¥0.40 | ¥8.00 |
+| `glm-4.7-flash` | Free | Free | Free |
+
+**Setup:**
+
+```bash
+cc-switch glm            # defaults to 4.7 (best value)
+cc-switch glm 5.1        # flagship, highest quality
+cc-switch glm flash      # free tier
+```
+
+You'll be prompted for an API key the first time. The key is stored in
+`~/.cc-kit/data/secrets.env` (mode 0600) as `ZHIPU_API_KEY=...`.
+
+Get an API key at https://open.bigmodel.cn (控制台 → API Keys).
+
+**Coding plan:**
+
+GLM has a coding plan subscription similar to MiniMax — a 5-hour window
+and a weekly window. cc-kit queries the monitoring API and shows the
+5h window as `XX% 5h` in the status line:
+
+```bash
+cc-balance
+# Output: 85%  5h:2h30m  wk:100%
 #         ^ 5h window remaining%  ^ time until reset  ^ weekly remaining%
 ```
 

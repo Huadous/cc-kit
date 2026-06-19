@@ -42,6 +42,14 @@ def get_provider_label():
         if "highspeed" in content:
             return "MM-hs"
         return "MM"
+    if "bigmodel" in content or "z.ai" in content:
+        if "glm-5.1" in content:
+            return "GLM-5.1"
+        if "glm-4.7-flash" in content:
+            return "GLM-flash"
+        if "glm-4.7" in content:
+            return "GLM-4.7"
+        return "GLM"
     return "AN"
 
 
@@ -164,7 +172,7 @@ def draw_dashboard():
         with term.location(4, y):
             print(f"{term.dim}{'Provider':<12} {'Sessions':>8} {'Input':>10} {'Output':>10}{term.normal}")
         y += 1
-        for provider in ["deepseek", "minimax", "anthropic"]:
+        for provider in ["deepseek", "minimax", "glm", "anthropic"]:
             if provider in history:
                 h = history[provider]
                 with term.location(4, y):

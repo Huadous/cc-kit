@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-06-19
+
+### Added
+- **GLM (Zhipu AI / 智谱) provider support**: full end-to-end integration
+  of Zhipu's Anthropic-compatible API endpoint (`open.bigmodel.cn`).
+  - `cc-switch glm [4.7|5.1|flash]` — 4.7 is the default (strong
+    reasoning/code at ¥2/¥0.4/¥8 per 1M tokens), 5.1 is the flagship
+    (¥6/¥1.3/¥24), flash is the free tier.
+  - Provider label: `GLM-5.1` / `GLM-4.7` / `GLM-flash` / `GLM`.
+  - Balance: coding plan quota via `/api/monitor/usage/quota/limit`
+    (same 5h+weekly window shape as MiniMax, displayed as
+    `85%  5h:2h30m  wk:100%`).
+  - API key stored as `ZHIPU_API_KEY` in `secrets.env`.
+  - All 6 `monitor.sh` provider-matching patterns updated (label,
+    pricing, currency, hit rate, cost, record).
+  - `cc-dash.py` and `cc-help` updated.
+  - `README.md`, `docs/PROVIDERS.md`, `data/*.example` templates,
+    `install.sh` next-steps all updated.
+  - New tests: 3 switch tests (4.7/5.1/flash), 3 monitor tests
+    (label for each model). All 94 tests pass.
+
 ## [0.1.8] - 2026-06-19
 
 ### Fixed
@@ -295,7 +316,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Balance query: DeepSeek account, MiniMax coding-plan quota
 - SessionStart / Stop hooks
 
-[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.9
 [0.1.8]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.8
 [0.1.7]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.7
 [0.1.6]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.6

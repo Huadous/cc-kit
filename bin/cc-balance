@@ -124,6 +124,60 @@ except Exception:
 " 2>/dev/null
 }
 
+query_glm() {
+  local key="${ZHIPU_API_KEY:-}"
+  if [[ -f "$CC_KIT_DIR/data/secrets.env" ]]; then
+    source "$CC_KIT_DIR/data/secrets.env"
+    key="${ZHIPU_API_KEY:-$key}"
+  fi
+  if [[ -z "$key" ]]; then
+    echo "No GLM API key found" >&2
+    return 1
+  fi
+
+  # GLM coding plan quota API (same shape as MiniMax).
+  # Auth is just the API key — no "Bearer" prefix (confirmed by opencode-glm-quota).
+  local resp
+  resp=$(curl -s --max-time 10 \
+    "https://open.bigmodel.cn/api/monitor/usage/quota/limit" \
+    -H "Authorization: $key" 2>/dev/null || echo "")
+
+  if [[ -z "$resp" ]]; then
+    return 1
+  fi
+
+  # Parse the coding plan quota response.
+  # Format: {"limits": [{"type": "coding_plan_5h", "remaining_percent": 85, "remaining_ms": 12345678, ...}, ...]}
+  echo "$resp" | python3 -c "
+import json,sys
+def fmt_ms(ms):
+    s = ms // 1000
+    h, rem = divmod(s, 3600)
+    m = rem // 60
+    return f'{h}h{m:02d}m'
+try:
+    data = json.load(sys.stdin)
+    limits = data.get('limits') or data.get('data', {}).get('limits') or []
+    if not limits:
+        print(''); sys.exit(0)
+    # Find the 5-hour coding plan window
+    cp5 = next((r for r in limits if '5h' in r.get('type','') or 'coding_plan' in r.get('type','')), None)
+    # Fall back to the first limit with remaining_percent
+    if not cp5:
+        cp5 = next((r for r in limits if 'remaining_percent' in r), limits[0] if limits else None)
+    if not cp5:
+        print(''); sys.exit(0)
+    interval_pct = cp5.get('remaining_percent', 0)
+    rem_ms       = cp5.get('remaining_ms', cp5.get('remains_time', 0))
+    # Weekly comes from a separate limit entry, or default to 0
+    weekly = next((r for r in limits if 'week' in r.get('type','').lower()), {})
+    weekly_pct   = weekly.get('remaining_percent', 0)
+    print(f'{interval_pct}%  5h:{fmt_ms(rem_ms)}  wk:{weekly_pct}%')
+except Exception:
+    print('')
+" 2>/dev/null
+}
+
 # Main
 provider="${1:-auto}"
 
@@ -132,9 +186,10 @@ if [[ "$provider" == "auto" ]]; then
   if [[ -f "$CC_KIT_DIR/data/provider.env" ]]; then
     source "$CC_KIT_DIR/data/provider.env"
     case "${ANTHROPIC_BASE_URL:-}" in
-      *deepseek*) provider="deepseek" ;;
-      *minimax*)  provider="minimax" ;;
-      *)          echo "Anthropic: use console.anthropic.com to check balance"; exit 0 ;;
+      *deepseek*)            provider="deepseek" ;;
+      *minimax*)             provider="minimax" ;;
+      *bigmodel*|*z.ai*)    provider="glm" ;;
+      *)                     echo "Anthropic: use console.anthropic.com to check balance"; exit 0 ;;
     esac
   fi
 fi
@@ -151,8 +206,18 @@ case "$provider" in
       exit 1
     fi
     ;;
+  glm)
+    out=$(query_glm)
+    if [[ -n "$out" ]]; then
+      echo "$out" > "$(monitor_balance_cache_file)"
+      echo "$out"
+    else
+      echo "Parse failed (GLM quota endpoint returned no data)" >&2
+      exit 1
+    fi
+    ;;
   *)
-    echo "Usage: cc-balance [deepseek|minimax|auto]" >&2
+    echo "Usage: cc-balance [deepseek|minimax|glm|auto]" >&2
     exit 1
     ;;
 esac

@@ -77,6 +77,42 @@ EOF
     rm -rf "$TMPDIR"
 }
 
+@test "monitor_provider_label: GLM 4.7" {
+    TMPDIR=$(mktemp -d)
+    cat > "$TMPDIR/provider.env" <<'EOF'
+export ANTHROPIC_BASE_URL="https://open.bigmodel.cn/api/anthropic"
+export ANTHROPIC_MODEL="glm-4.7"
+EOF
+    MONITOR_DATA_DIR="$TMPDIR"
+    result=$(monitor_provider_label)
+    [ "$result" = "GLM-4.7" ]
+    rm -rf "$TMPDIR"
+}
+
+@test "monitor_provider_label: GLM 5.1" {
+    TMPDIR=$(mktemp -d)
+    cat > "$TMPDIR/provider.env" <<'EOF'
+export ANTHROPIC_BASE_URL="https://open.bigmodel.cn/api/anthropic"
+export ANTHROPIC_MODEL="glm-5.1"
+EOF
+    MONITOR_DATA_DIR="$TMPDIR"
+    result=$(monitor_provider_label)
+    [ "$result" = "GLM-5.1" ]
+    rm -rf "$TMPDIR"
+}
+
+@test "monitor_provider_label: GLM flash" {
+    TMPDIR=$(mktemp -d)
+    cat > "$TMPDIR/provider.env" <<'EOF'
+export ANTHROPIC_BASE_URL="https://open.bigmodel.cn/api/anthropic"
+export ANTHROPIC_MODEL="glm-4.7-flash"
+EOF
+    MONITOR_DATA_DIR="$TMPDIR"
+    result=$(monitor_provider_label)
+    [ "$result" = "GLM-flash" ]
+    rm -rf "$TMPDIR"
+}
+
 @test "monitor_provider_label: anthropic default" {
     TMPDIR=$(mktemp -d)
     cat > "$TMPDIR/provider.env" <<'EOF'

@@ -92,6 +92,7 @@ cc-switch deepseek    # 或 minimax / anthropic
 |---|---|---|---|
 | DeepSeek | `https://api.deepseek.com/anthropic` | ¥ | Pro / Flash，便宜快速 |
 | MiniMax | `https://api.minimaxi.com/anthropic` | ¥ | M2.7 / M3 / highspeed |
+| GLM（智谱） | `https://open.bigmodel.cn/api/anthropic` | ¥ | 5.1 / 4.7 / Flash，coding plan |
 | Anthropic | `https://api.anthropic.com`（默认） | $ | Opus / Sonnet / Haiku |
 
 API key 存放在 `~/.cc-kit/data/secrets.env`（权限 0600），永不打印或外传。

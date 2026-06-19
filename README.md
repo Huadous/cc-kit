@@ -54,6 +54,7 @@ That's it. Your status line will start showing real-time token usage and cost.
 |---|---|
 | `cc-switch deepseek [pro\|flash]` | Switch to DeepSeek (default: pro) |
 | `cc-switch minimax [m2.7\|m3\|highspeed]` | Switch to MiniMax (default: m2.7) |
+| `cc-switch glm [4.7\|5.1\|flash]` | Switch to GLM / Zhipu AI (default: 4.7) |
 | `cc-switch anthropic` | Restore Anthropic default |
 | `cc-switch show` | Show current provider/model |
 | `cc-mode single\|wide\|full` | Change status-line layout |
@@ -124,6 +125,7 @@ Exit codes: `0` = no FAIL findings, `1` = at least one FAIL. The tool is **read-
 |---|---|---|---|
 | DeepSeek | `https://api.deepseek.com/anthropic` | ¥ | Pro / Flash, fast & cheap |
 | MiniMax | `https://api.minimaxi.com/anthropic` | ¥ | M2.7 / M3 / highspeed |
+| GLM (Zhipu) | `https://open.bigmodel.cn/api/anthropic` | ¥ | 5.1 / 4.7 / Flash, coding plan |
 | Anthropic | `https://api.anthropic.com` (default) | $ | Opus / Sonnet / Haiku |
 
 API keys are stored in `~/.cc-kit/data/secrets.env` (mode 0600). They are never logged or transmitted.

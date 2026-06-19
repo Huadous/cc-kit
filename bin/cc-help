@@ -10,6 +10,8 @@ cat << 'EOF'
     cc-switch deepseek flash       DeepSeek Flash only
     cc-switch minimax              MiniMax M2.7 + highspeed subagent
     cc-switch minimax m3           MiniMax M3 + highspeed subagent
+    cc-switch glm                  GLM 4.7 + Flash subagent
+    cc-switch glm 5.1              GLM 5.1 flagship
     cc-switch anthropic            Restore Anthropic default
     cc-switch show                 Show current config
 

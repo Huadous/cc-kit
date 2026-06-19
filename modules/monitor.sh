@@ -121,6 +121,13 @@ monitor_provider_label() {
           *highspeed*) echo "MM-hs" ;;
           *)           echo "MM" ;;
         esac ;;
+      *bigmodel*|*z.ai*)
+        case "${ANTHROPIC_MODEL:-}" in
+          *glm-5.1*)      echo "GLM-5.1" ;;
+          *glm-4.7-flash*) echo "GLM-flash" ;;
+          *glm-4.7*)      echo "GLM-4.7" ;;
+          *)              echo "GLM" ;;
+        esac ;;
       *) echo "AN" ;;
     esac
   else
@@ -146,6 +153,12 @@ monitor_pricing() {
           *highspeed*) echo "2.0 0.2 8.0" ;;
           *)           echo "2.0 0.2 8.0" ;;
         esac ;;
+      *bigmodel*|*z.ai*)
+        case "${ANTHROPIC_MODEL:-}" in
+          *glm-5.1*)      echo "6.0 1.3 24.0" ;;
+          *glm-4.7-flash*) echo "0 0 0" ;;
+          *)              echo "2.0 0.4 8.0" ;;
+        esac ;;
       *) echo "3.00 3.00 15.00" ;;  # Anthropic USD
     esac
   else
@@ -158,7 +171,7 @@ monitor_currency() {
   if [[ -f "$MONITOR_DATA_DIR/provider.env" ]]; then
     source "$MONITOR_DATA_DIR/provider.env"
     case "${ANTHROPIC_BASE_URL:-}" in
-      *deepseek*|*minimax*) echo "¥" ;;
+      *deepseek*|*minimax*|*bigmodel*|*z.ai*) echo "¥" ;;
       *) echo "$" ;;
     esac
   else
@@ -216,6 +229,7 @@ monitor_global_hit_rate() {
     case "${ANTHROPIC_BASE_URL:-}" in
       *deepseek*) provider="deepseek" ;;
       *minimax*)  provider="minimax" ;;
+      *bigmodel*|*z.ai*) provider="glm" ;;
       *)          provider="anthropic" ;;
     esac
   fi
@@ -244,6 +258,7 @@ monitor_global_cost() {
     case "${ANTHROPIC_BASE_URL:-}" in
       *deepseek*) provider="deepseek" ;;
       *minimax*)  provider="minimax" ;;
+      *bigmodel*|*z.ai*) provider="glm" ;;
       *)          provider="anthropic" ;;
     esac
   fi
@@ -413,6 +428,7 @@ monitor_record() {
     case "${ANTHROPIC_BASE_URL:-}" in
       *deepseek*) provider="deepseek" ;;
       *minimax*)  provider="minimax" ;;
+      *bigmodel*|*z.ai*) provider="glm" ;;
     esac
     model="${ANTHROPIC_MODEL:-unknown}"
   fi
