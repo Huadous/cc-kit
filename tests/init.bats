@@ -51,18 +51,16 @@ setup() {
 @test "init.sh: WARNS when CC_KIT_ROOT points to non-existent path" {
     # The dangerous case: env var set to a path that doesn't exist.
     # Silent fallback was the root cause of a real SessionStart outage.
-    # We capture both stdout and stderr; the warning goes to stderr.
     run bash -c "export CC_KIT_ROOT='/no/such/path/anywhere'; source '$REAL_INIT' 2>&1; echo \"ROOT=\$CC_KIT_ROOT\""
     [[ "$output" =~ "WARNING" ]]
     [[ "$output" =~ "not accessible" ]]
     [[ "$output" =~ "/no/such/path/anywhere" ]]
-    # Falls back to the auto-detected install dir (the echo prints
-    # "ROOT=/home/develop/projects/cc-kit", which is the real install).
-    # The literal "ROOT=/no/such" should NOT appear as an assignment.
-    [[ "$output" =~ "ROOT=" ]]
-    # The echo prints "ROOT=$CC_KIT_ROOT" with the FALLBACK dir. Use a
-    # marker that wouldn't appear in the warning text:
-    [[ "$output" =~ "ROOT=/home/develop" ]]
+    # The echo at the end prints the FALLBACK CC_KIT_ROOT. It must be
+    # set to a real path (not the broken one, not empty).
+    root_val=$(echo "$output" | sed -n 's/^ROOT=//p')
+    [[ -n "$root_val" ]]
+    [[ "$root_val" != "/no/such/path/anywhere" ]]
+    [[ -d "$root_val" ]]
 }
 
 @test "init.sh: no warning when CC_KIT_ROOT points to a symlink that resolves to a real path" {
