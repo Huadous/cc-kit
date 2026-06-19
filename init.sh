@@ -46,3 +46,9 @@ if [[ -f "$CC_KIT_ROOT/data/provider.env" ]]; then
   # shellcheck disable=SC1090
   source "$CC_KIT_ROOT/data/provider.env"
 fi
+
+# Bash tab completion for cc-* commands
+if [[ -f "$CC_KIT_ROOT/completions/cc.bash" ]]; then
+  # shellcheck disable=SC1090
+  source "$CC_KIT_ROOT/completions/cc.bash"
+fi

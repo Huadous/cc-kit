@@ -173,7 +173,7 @@ mkdir -p "$CC_KIT_ROOT"
 # DST, creating DST/SRC/. On repeated installs this would build
 # ~/.cc-kit/bin/bin/bin/bin/...  Wipe each target dir first so the copy is
 # always a clean top-level replacement (data/ is preserved separately above).
-for d in bin modules hooks; do
+for d in bin modules hooks completions; do
   rm -rf "${CC_KIT_ROOT:?}/$d"
   cp -r "$SRC_DIR/$d" "$CC_KIT_ROOT/$d"
 done
