@@ -226,7 +226,7 @@ cc-switch() {
   for arg in "${@:2}"; do
     case "$arg" in
       --new-key|-n) force_new="true" ;;
-      pro|flash|m2.7|m2-7|highspeed|m3|4.7|4-7|5.1|5-1) model="$arg" ;;
+      pro|flash|m2.7|m2-7|highspeed|m3|4.7|4-7|5.1|5-1|5.2|5-2) model="$arg" ;;
       *)
         echo "Unknown option: $arg" >&2
         return 1
@@ -251,6 +251,7 @@ cc-switch() {
       ;;
     glm)
       case "${model:-4.7}" in
+        5.2|5-2)   main_model="glm-5.2";       sub_model="glm-4.7-flash"; model_label="5.2" ;;
         5.1|5-1)   main_model="glm-5.1";       sub_model="glm-4.7-flash"; model_label="5.1" ;;
         4.7|4-7)   main_model="glm-4.7";       sub_model="glm-4.7-flash"; model_label="4.7" ;;
         flash)     main_model="glm-4.7-flash";  sub_model="glm-4.7-flash"; model_label="flash" ;;
@@ -375,7 +376,7 @@ EOF
 Usage:
   cc-switch deepseek [pro|flash]           Switch to DeepSeek (default: pro)
   cc-switch minimax [m2.7|highspeed|m3]    Switch to MiniMax (default: m2.7)
-  cc-switch glm [4.7|5.1|flash]            Switch to GLM / Zhipu AI (default: 4.7)
+  cc-switch glm [4.7|5.1|5.2|flash]        Switch to GLM / Zhipu AI (default: 4.7)
   cc-switch anthropic                      Restore official Anthropic default
   cc-switch show                           Show current provider config
   cc-switch <provider> <model> --new-key   Force re-enter API key
@@ -391,6 +392,7 @@ MiniMax models:
 
 GLM (Zhipu AI) models:
   4.7     glm-4.7 (main)       + glm-4.7-flash (subagent)  —  strong reasoning
+  5.2     glm-5.2 (main)       + glm-4.7-flash (subagent)  —  latest flagship
   5.1     glm-5.1 (main)       + glm-4.7-flash (subagent)  —  flagship
   flash   glm-4.7-flash (main) + glm-4.7-flash (subagent)  —  free tier
 

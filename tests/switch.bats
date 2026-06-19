@@ -104,6 +104,12 @@ teardown() {
     grep -q 'ANTHROPIC_MODEL="glm-5.1"' "$CONFIG_FILE"
 }
 
+@test "cc-switch glm 5.2 writes glm-5.2" {
+    save_secret "glm" "sk-test-glm-1234567890"
+    cc-switch glm 5.2 >/dev/null 2>&1
+    grep -q 'ANTHROPIC_MODEL="glm-5.2"' "$CONFIG_FILE"
+}
+
 @test "cc-switch glm flash writes glm-4.7-flash" {
     save_secret "glm" "sk-test-glm-1234567890"
     cc-switch glm flash >/dev/null 2>&1

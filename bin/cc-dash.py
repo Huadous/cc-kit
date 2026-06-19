@@ -43,6 +43,8 @@ def get_provider_label():
             return "MM-hs"
         return "MM"
     if "bigmodel" in content or "z.ai" in content:
+        if "glm-5.2" in content:
+            return "GLM-5.2"
         if "glm-5.1" in content:
             return "GLM-5.1"
         if "glm-4.7-flash" in content:

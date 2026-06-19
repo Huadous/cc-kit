@@ -123,6 +123,7 @@ monitor_provider_label() {
         esac ;;
       *bigmodel*|*z.ai*)
         case "${ANTHROPIC_MODEL:-}" in
+          *glm-5.2*)      echo "GLM-5.2" ;;
           *glm-5.1*)      echo "GLM-5.1" ;;
           *glm-4.7-flash*) echo "GLM-flash" ;;
           *glm-4.7*)      echo "GLM-4.7" ;;
@@ -155,6 +156,7 @@ monitor_pricing() {
         esac ;;
       *bigmodel*|*z.ai*)
         case "${ANTHROPIC_MODEL:-}" in
+          *glm-5.2*)      echo "6.0 1.3 24.0" ;;
           *glm-5.1*)      echo "6.0 1.3 24.0" ;;
           *glm-4.7-flash*) echo "0 0 0" ;;
           *)              echo "2.0 0.4 8.0" ;;
