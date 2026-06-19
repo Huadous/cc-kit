@@ -50,14 +50,25 @@ if os.path.exists(bal_file):
         with open(bal_file) as f: bal = f.read().strip().split()[0]
     except: pass
 
-# Context window from stdin
+# Context window from stdin. Claude Code's statusLine payload nests the
+# context info under a `context_window` key (with `total_tokens`,
+# `used_percentage`, `remaining_percentage`). Older payloads (or the
+# user's manual test scripts) may pass it at the top level — try both
+# locations before defaulting to 0.
 ctx_pct = ""
 try:
     raw = sys.stdin.read()
     if raw:
         data = json.loads(raw)
-        ctx_pct = str(int(float(data.get("remaining_percentage", 0))))
-except: pass
+        cw = data.get("context_window") or {}
+        # Try nested first (Claude Code actual format), then top-level (legacy).
+        remaining = cw.get("remaining_percentage")
+        if remaining is None:
+            remaining = data.get("remaining_percentage")
+        if remaining is not None:
+            ctx_pct = str(int(float(remaining)))
+except Exception:
+    pass
 
 # ── ANSI ────────────────────────────────────────────────────────────
 R  = "\033[0m"; B = "\033[1m"; D = "\033[2m"

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-06-19
+
+### Fixed
+- **Context bar missing in 3-line (`full`) mode**: `bin/cc-status-full.py`
+  read `data["remaining_percentage"]` at the top level of the stdin
+  JSON, but Claude Code's statusLine payload nests it under
+  `context_window.remaining_percentage`. Result: full mode always
+  rendered `context 0%` (a full red bar with 0% remaining) even when
+  the user had plenty of context left, while `single` and `wide`
+  modes worked because the bash `cc-status` greps for the key string
+  regardless of nesting. Fix: try `context_window.remaining_percentage`
+  first, then fall back to top-level for legacy payloads.
+  (Bug was invisible to the maintainer because manual testing was
+  done with a top-level synthetic JSON, never with a realistic
+  nested one.)
+
+### Added
+- **`tests/status.bats`** (8 tests) covering: nested JSON parses
+  correctly in `full` / `wide` / `single` modes, top-level JSON
+  still works (legacy), empty stdin and malformed JSON don't crash,
+  `--help` lists all three modes.
+
 ## [0.1.7] - 2026-06-19
 
 ### Fixed
@@ -273,7 +295,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Balance query: DeepSeek account, MiniMax coding-plan quota
 - SessionStart / Stop hooks
 
-[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.8
 [0.1.7]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.7
 [0.1.6]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.6
 [0.1.5]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.5
