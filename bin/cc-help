@@ -15,6 +15,7 @@ cat << 'EOF'
     cc-switch glm 5.2              GLM 5.2 latest flagship
     cc-switch anthropic            Restore Anthropic default
     cc-switch show                 Show current config
+    cc-switch <provider> --new-key Replace saved API key
 
   Display Modes
     cc-mode single                  1-line compact
