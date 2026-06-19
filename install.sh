@@ -45,17 +45,57 @@ SETTINGS_FILE="$HOME/.claude/settings.json"
 LOCAL_BIN="$HOME/.local/bin"
 BACKUP_DIR="$CC_KIT_ROOT/.backup"
 
-# Warn if the user has CC_KIT_DIR / CC_KIT_ROOT exports in their rc file.
-# These silently override cc-kit's self-location and were the root cause
-# of a real user outage (SessionStart hook pointed at a non-existent path).
+# Warn — and offer to remove — CC_KIT_DIR / CC_KIT_ROOT / MONITOR_DATA_DIR
+# exports in the user's rc file. These silently override cc-kit's self-
+# location and were the root cause of a real user outage (SessionStart hook
+# pointed at a non-existent path, and the status line rendered against the
+# wrong provider.env). Just printing a warning isn't enough: users tend to
+# scroll past, the rc file stays broken, and the next reinstall looks fine
+# but keeps hitting the override. Offer to delete the lines now.
+#
+# The matching regex and delete command live in a small helper so bats
+# tests can exercise them in isolation. Install-time code below just
+# wires the helper to the prompt.
+#
+# _cc_kit_clean_rc_exports <file> <auto_yes>
+#   auto_yes=1 → delete without prompting; 0 → print lines and ask
+#   Echoes offending lines (with line numbers). If deleted, prints a
+#   confirmation. Returns 0 if any lines were removed, 1 otherwise.
+_cc_kit_clean_rc_exports() {
+  local rc_file="$1"
+  local auto_yes="${2:-0}"
+  [[ -f "$rc_file" ]] || return 1
+  # `^[^#]*` ensures the line isn't a comment; `\<` word boundary
+  # prevents false matches on `CC_KIT_DIR_TEST=...` and similar.
+  local matches
+  matches=$(grep -nE '^[^#]*\<export[[:space:]]+(CC_KIT_DIR|CC_KIT_ROOT|MONITOR_DATA_DIR)=' "$rc_file" 2>/dev/null)
+  [[ -z "$matches" ]] && return 1
+  echo "$matches" | sed 's/^/      /'
+  if [[ "$auto_yes" != "1" ]]; then
+    read -rp "    Remove these lines? [Y/n] " _ans
+    case "$_ans" in
+      [Nn]*) echo "    ! kept (remove manually later)"; return 1 ;;
+    esac
+  fi
+  sed -i -E '/^[^#]*\<export[[:space:]]+(CC_KIT_DIR|CC_KIT_ROOT|MONITOR_DATA_DIR)=/d' "$rc_file"
+  echo "    ✓ removed"
+  return 0
+}
+
+_removed_rc_exports=0
 for _rc in "$HOME/.bashrc" "$HOME/.zshrc" "${ZDOTDIR:-$HOME}/.zshrc"; do
-  if [[ -f "$_rc" ]] && grep -qE '^[^#]*\<export[[:space:]]+(CC_KIT_DIR|CC_KIT_ROOT)=' "$_rc" 2>/dev/null; then
-    echo "  ! Detected CC_KIT_DIR / CC_KIT_ROOT export in $_rc"
-    echo "    This silently overrides cc-kit's auto-detected install path."
-    echo "    If you don't need it for dev work, remove those lines to avoid path mismatches."
+  if [[ -f "$_rc" ]] && grep -qE '^[^#]*\<export[[:space:]]+(CC_KIT_DIR|CC_KIT_ROOT|MONITOR_DATA_DIR)=' "$_rc" 2>/dev/null; then
+    echo ""
+    echo "  ! Detected cc-kit path override(s) in $_rc:"
+    if _cc_kit_clean_rc_exports "$_rc" 0; then
+      _removed_rc_exports=$(( _removed_rc_exports + 1 ))
+    fi
   fi
 done
 unset _rc
+if [[ "$_removed_rc_exports" -gt 0 ]]; then
+  echo "  → $CC_KIT_ROOT will be picked up on next shell start (run: source $BASHRC_FILE)"
+fi
 
 echo ""
 echo "  ◈  CC-KIT INSTALLER"

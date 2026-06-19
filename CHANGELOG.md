@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-06-19
+
+### Changed
+- **`install.sh` actively cleans stale rc-file exports** (not just warns).
+  The pre-flight scan in `install.sh` used to grep `~/.bashrc` and
+  `~/.zshrc` for `export CC_KIT_DIR=` / `export CC_KIT_ROOT=` lines and
+  print a one-line warning that most users scrolled past. Result: the
+  rc file stayed broken across reinstalls and the next SessionStart hook
+  or status line would silently render against the wrong
+  provider.env / data dir. Now:
+  - Detection also covers `MONITOR_DATA_DIR=` (was missing — that's how
+    the v0.1.3 banner bug hid for so long; the env var kept pointing at
+    the dev checkout).
+  - Offending lines are printed with line numbers so the user can see
+    exactly what will be removed.
+  - The user is prompted `Remove these lines? [Y/n]` and the deletion
+    happens immediately (with `sed -i`) on confirmation. Comments and
+    unrelated exports are left untouched.
+  - The regex/sed logic is extracted into `_cc_kit_clean_rc_exports`
+    for bats testability.
+
+### Added
+- **`tests/install.bats`** (6 new tests) covering the rc-cleanup
+  helper: removes the right vars, keeps unrelated exports, ignores
+  commented-out lines, doesn't false-match `CC_KIT_DIR_TEST=`,
+  no-op when nothing matches, no-op when file missing.
+
 ## [0.1.4] - 2026-06-19
 
 ### Fixed
@@ -173,7 +200,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Balance query: DeepSeek account, MiniMax coding-plan quota
 - SessionStart / Stop hooks
 
-[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.5
 [0.1.4]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.4
 [0.1.3]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.2
