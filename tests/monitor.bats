@@ -242,13 +242,14 @@ EOF
     [ "$result" = "42m" ]
 }
 
-@test "monitor_balance_label: coding-plan format with currency + remaining" {
+@test "monitor_balance_label: coding-plan format with remaining" {
     TMPDIR=$(mktemp -d)
     cat > "$TMPDIR/cache" <<'EOF'
 91%  5h:4h02m  wk:100%
 EOF
+    # No ¥ prefix — the percentage IS the unit, not a monetary amount.
     result=$(monitor_balance_label "91%  5h:4h02m  wk:100%" "¥" "$TMPDIR/cache")
-    [ "$result" = "¥91%  4h02m" ]
+    [ "$result" = "91%  4h02m" ]
     rm -rf "$TMPDIR"
 }
 
@@ -270,11 +271,23 @@ EOF
 @test "monitor_balance_label: coding-plan falls back to 5h when no remaining fragment" {
     # Older cache format: just "91%  wk:100%" without a 5h:HHhMMm fragment
     result=$(monitor_balance_label "91%  wk:100%" "¥")
-    [ "$result" = "¥91% 5h" ]
+    [ "$result" = "91% 5h" ]
 }
 
-@test "monitor_balance_label: respects currency override" {
+@test "monitor_balance_label: respects currency override on pay-as-you-go only" {
     # Pay-as-you-go with $ override
     result=$(monitor_balance_label "10.00 USD" "\$")
     [ "$result" = "\$10.00 USD" ]
+}
+
+@test "monitor_coding_plan_remaining: handles minutes with leading zero (08/09)" {
+    # Regression: bash treats "08"/"09" as octal and dies with
+    # "value too great for base (error token is "08")" because
+    # 8/9 are not valid octal digits. The fix forces base 10 with 10#.
+    result=$(monitor_coding_plan_remaining "91%  5h:4h08m  wk:100%" "")
+    [ "$result" = "4h08m" ]
+    result=$(monitor_coding_plan_remaining "91%  5h:4h09m  wk:100%" "")
+    [ "$result" = "4h09m" ]
+    result=$(monitor_coding_plan_remaining "91%  5h:0h08m  wk:100%" "")
+    [ "$result" = "8m" ]
 }

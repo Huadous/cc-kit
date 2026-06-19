@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-06-19
+
+### Fixed
+- **Wrong currency prefix on coding-plan percentage**:
+  `monitor_balance_label` was prepending the currency symbol (¥/$)
+  to *every* cached balance string, including the MiniMax coding-plan
+  format `"91%  5h:4h02m  wk:100%"`. Result: `¥91%  4h02m` — semantically
+  wrong, since the percentage is a quota utilization, not a monetary
+  amount. Currency is now only prepended for pay-as-you-go balances
+  (`¥30.77 CNY`); the coding-plan shape renders as `91%  4h02m`.
+- **Octal parse crash on `08`/`09` minute values**: the helper
+  `monitor_coding_plan_remaining` did `total_s=$(( h*3600 + m*60 ))`
+  and bash interpreted a leading-zero `m` like `"08"` as octal — then
+  died with `08: value too great for base (error token is "08")`
+  because 8/9 aren't valid octal digits. Today the cache format
+  happened to land on `4h08m`, so the helper silently returned empty
+  and the banner fell back to the static `5h` label. Fix: force
+  base-10 with `10#$h` and `10#$m`. Also covers `0h08m → 8m`.
+- **Stale bats test that codified the wrong behavior**:
+  `monitor_balance_label: coding-plan format with currency + remaining`
+  was asserting `¥91%  4h02m` — i.e. locking in the bug. Renamed to
+  `...with remaining` and corrected to expect `91%  4h02m` (no ¥).
+  New `monitor_coding_plan_remaining: handles minutes with leading
+  zero (08/09)` test guards the octal regression.
+
 ## [0.1.3] - 2026-06-17
 
 ### Fixed
@@ -148,7 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Balance query: DeepSeek account, MiniMax coding-plan quota
 - SessionStart / Stop hooks
 
-[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.4
 [0.1.3]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.1

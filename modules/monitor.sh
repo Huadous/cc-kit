@@ -318,12 +318,14 @@ monitor_coding_plan_remaining() {
   fi
   local cached_remaining="${fragment#5h:}"  # strip "5h:" prefix
   # Parse the snapshot into seconds so we can both reformat (drop 0h)
-  # and adjust for cache age.
+  # and adjust for cache age. The `10#` prefix forces base-10 — without it,
+  # bash interprets a leading-zero `m` like "08" or "09" as octal and dies
+  # with "value too great for base" (8/9 are not valid octal digits).
   local h m total_s
   h=$(printf '%s' "$cached_remaining" | grep -oE '^[0-9]+h' | tr -d 'h')
   m=$(printf '%s' "$cached_remaining" | grep -oE '[0-9]+m$' | tr -d 'm')
   h="${h:-0}"; m="${m:-0}"
-  total_s=$(( h*3600 + m*60 ))
+  total_s=$(( 10#$h*3600 + 10#$m*60 ))
   # If we don't have a cache file, use the snapshot as-is.
   if [[ -z "$cache_file" || ! -f "$cache_file" ]]; then
     monitor_coding_plan_fmt "$total_s"
@@ -363,14 +365,19 @@ monitor_coding_plan_fmt() {
 
 # Render the full balance label (currency + amount / pct + remaining time)
 # from a cached balance value. Two shapes:
-#   "30.77 CNY" (DeepSeek pay-as-you-go)        → "¥30.77"
-#   "91%  5h:4h02m  wk:100%" (MiniMax coding plan) → "¥91%  4h02m"
+#   "30.77 CNY" (DeepSeek pay-as-you-go)        → "¥30.77 CNY"
+#   "91%  5h:4h02m  wk:100%" (MiniMax coding plan) → "91%  4h02m"
 # Falls back to:
-#   "¥91% 5h" when the cache has the coding-plan pct shape but lacks a
+#   "91% 5h" when the cache has the coding-plan pct shape but lacks a
 #   remaining-time fragment (older cache format from a pre-v0.1.2 install).
 #   "" (empty) when there's no cache at all.
 # Single source of truth so cc-status and the session-start banner can't
 # drift.
+#
+# Currency is only prepended for pay-as-you-go amounts. The coding-plan
+# percentage is a quota utilization (no monetary value attached), so the
+# ¥/$ prefix would be semantically wrong — it would read like "91% of
+# ¥something" when really it's "91% of the 5h window used".
 monitor_balance_label() {
   local bal="${1:-}"
   local cur="${2:-$(monitor_currency 2>/dev/null || echo '$')}"
@@ -379,14 +386,14 @@ monitor_balance_label() {
     return
   fi
   if [[ "$bal" == *%* ]]; then
-    # Coding plan: show interval pct + 5h remaining time
+    # Coding plan: show interval pct + 5h remaining time (no currency prefix)
     local interval_pct remaining
     interval_pct=$(printf '%s' "$bal" | grep -oE '^[0-9]+%' | tr -d '%')
     remaining=$(monitor_coding_plan_remaining "$bal" "${3:-}")
     if [[ -n "$remaining" ]]; then
-      echo "${cur}${interval_pct}%  ${remaining}"
+      echo "${interval_pct}%  ${remaining}"
     else
-      echo "${cur}${interval_pct}% 5h"
+      echo "${interval_pct}% 5h"
     fi
   elif [[ "$bal" != "0.00" ]]; then
     echo "${cur}${bal}"
