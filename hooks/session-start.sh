@@ -34,7 +34,13 @@ mode=$(cat "$CC_KIT_DIR/data/.display_mode" 2>/dev/null || echo "full")
 # banner and the status line stay in sync. monitor_balance_label is the
 # single source of truth — same helper used by bin/cc-status.
 bal_display=$(monitor_balance_label "$bal" "$cur" "$CC_KIT_DIR/data/.balance_cache")
-[[ -z "$bal_display" ]] && bal_display="${cur}—"
+if [[ -z "$bal_display" ]]; then
+  if monitor_has_api_key 2>/dev/null; then
+    bal_display="${cur}—"
+  else
+    bal_display="${cur}no key"
+  fi
+fi
 
 cat <<EOF
 

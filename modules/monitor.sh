@@ -283,6 +283,30 @@ monitor_global_cost() {
 monitor_balance_cache_file() {
   echo "$MONITOR_DATA_DIR/.balance_cache"
 }
+
+# Check whether the current provider has a usable API key — without
+# printing the key value. Returns 0 (yes) or 1 (no).
+# Looks in provider.env (ANTHROPIC_AUTH_TOKEN) and secrets.env (per-provider
+# variable like DEEPSEEK_API_KEY). If neither is set, cc-balance can't
+# query the balance API and the banner will show an empty balance.
+monitor_has_api_key() {
+  local secrets_file="${CC_KIT_DIR:-$MONITOR_DATA_DIR/..}/data/secrets.env"
+  local have=1
+  if [[ -f "$MONITOR_DATA_DIR/provider.env" ]]; then
+    source "$MONITOR_DATA_DIR/provider.env"
+    [[ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]] && have=0
+  fi
+  if [[ "$have" -ne 0 && -f "$secrets_file" ]]; then
+    source "$secrets_file"
+    case "${ANTHROPIC_BASE_URL:-}" in
+      *deepseek*)            [[ -n "${DEEPSEEK_API_KEY:-}" ]] && have=0 ;;
+      *minimax*)             [[ -n "${MINIMAX_API_KEY:-}" ]]  && have=0 ;;
+      *bigmodel*|*z.ai*)    [[ -n "${ZHIPU_API_KEY:-}" ]]    && have=0 ;;
+    esac
+  fi
+  return $have
+}
+
 monitor_cached_balance() {
   local cache_file
   cache_file=$(monitor_balance_cache_file)

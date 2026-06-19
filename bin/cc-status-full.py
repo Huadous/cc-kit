@@ -102,6 +102,32 @@ if bal:
         elif n < 30: bal_c = YL
     except: pass
 
+# Check if the current provider has an API key (affects balance fallback text).
+def _has_api_key():
+    """Return True if the current provider's API key is set."""
+    provider_env = os.path.join(CC_KIT, "data", "provider.env")
+    secrets_env = os.path.join(CC_KIT, "data", "secrets.env")
+    base_url = os.getenv("ANTHROPIC_BASE_URL", "")
+    # ANTHROPIC_AUTH_TOKEN set directly in env
+    if os.getenv("ANTHROPIC_AUTH_TOKEN", ""):
+        return True
+    # Read secrets.env for per-provider keys
+    try:
+        with open(secrets_env) as f:
+            content = f.read()
+        if "deepseek" in base_url:
+            if 'DEEPSEEK_API_KEY="' in content and 'DEEPSEEK_API_KEY=""' not in content:
+                return True
+        elif "minimax" in base_url:
+            if 'MINIMAX_API_KEY="' in content and 'MINIMAX_API_KEY=""' not in content:
+                return True
+        elif "bigmodel" in base_url or "z.ai" in base_url:
+            if 'ZHIPU_API_KEY="' in content and 'ZHIPU_API_KEY=""' not in content:
+                return True
+    except Exception:
+        pass
+    return False
+
 # ── Build lines (no ANSI inside the content width calculation) ──────
 now = datetime.now().strftime("%H:%M")
 
@@ -152,7 +178,8 @@ def make_line(left, right):
 
 # Line 1: Provider + model | cost + balance | time
 l1_left  = f"◆ {label}  {D}{model}{R}"
-l1_right = f"{YL}{cur}{cost_s} session{R}  {bal_c}{cur}{bal if bal else '—'} balance{R}  {D}{now}{R}"
+bal_fb = bal if bal else ('—' if _has_api_key() else 'no key')
+l1_right = f"{YL}{cur}{cost_s} session{R}  {bal_c}{cur}{bal_fb} balance{R}  {D}{now}{R}"
 l1 = make_line(l1_left, l1_right)
 
 # Line 2: context bar + token stats. Shrink ctx bar to 20 chars if it

@@ -121,6 +121,13 @@ if [[ -n "$balance_text" ]]; then
     (( $(echo "$bn >= 10 && $bn < 30" | bc -l 2>/dev/null) )) && bc="$YELLOW"
   fi
   bal_label="${bc}${balance_text}${R}"
+else
+  # No balance data: show a hint if the API key is missing.
+  if monitor_has_api_key 2>/dev/null; then
+    bal_label="${GRAY}${cur}—${R}"
+  else
+    bal_label="${RED}${cur}no key${R}"
+  fi
 fi
 
 # ── Hit rate ────────────────────────────────────────────────────────
