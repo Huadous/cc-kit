@@ -60,11 +60,13 @@ That's it. Your status line will start showing real-time token usage and cost.
 | `cc-balance` | Refresh account balance / coding-plan quota |
 | `cc-help` | Show this help inside Claude Code (zero tokens) |
 | `cc-dash` | Standalone dashboard (separate terminal) |
+| `cc-doctor` | Diagnose config drift / broken installs / env-var overrides |
 
 In Claude Code, all commands are also available with the `!` prefix to run them without consuming tokens:
 - `!cc-help`
 - `!cc-switch deepseek pro`
 - `!cc-balance`
+- `!cc-doctor`
 
 ---
 
@@ -84,6 +86,35 @@ In Claude Code, all commands are also available with the `!` prefix to run them 
 **`full`** (3-line boxed dashboard — renders in a separate Python script for proper box alignment)
 
 Switch with `cc-mode wide`.
+
+---
+
+## Diagnostics — `cc-doctor`
+
+When something feels off (status line rendering wrong, hooks silently failing, banner showing the wrong provider), run `cc-doctor`:
+
+```bash
+cc-doctor          # human-readable report
+cc-doctor --json   # machine-readable (for scripting)
+cc-doctor --fix    # apply safe auto-fixes (stale rc-file exports, missing ~/.local/bin symlinks)
+```
+
+It checks 11 things and reports each as `OK`, `WARN`, or `FAIL`:
+
+| Check | What it looks at |
+|---|---|
+| `env_override` | stale `CC_KIT_DIR`/`CC_KIT_ROOT`/`MONITOR_DATA_DIR` exports in `~/.bashrc` and `~/.zshrc` |
+| `duplicate_sources` | multiple `source init.sh` or `source provider.env` lines in rc files |
+| `install_path` | `bin/`, `modules/`, `hooks/`, `init.sh`, `install.sh` all present |
+| `provider_env` | `data/provider.env` has a valid `ANTHROPIC_BASE_URL` and `ANTHROPIC_MODEL` |
+| `key_*` | API keys in `data/secrets.env` are present and the file is `chmod 600` (values are masked) |
+| `balance_cache` | `.balance_cache` is fresh (< 10 min old) |
+| `settings_json` | `~/.claude/settings.json` has `statusLine` + `SessionStart` + `Stop` hooks |
+| `symlinks` | every `bin/cc-*` is symlinked into `~/.local/bin` |
+| `self_locate` | every path-aware bash script uses `BASH_SOURCE[0]` |
+| `env_selflocate` | `$CC_KIT_DIR` env (if set) matches the self-located install dir |
+
+Exit codes: `0` = no FAIL findings, `1` = at least one FAIL. The tool is **read-only by default** — `--fix` only touches rc files (delete stale exports) and `~/.local/bin/` (create missing symlinks). It never edits `secrets.env`, `provider.env`, or `settings.json`.
 
 ---
 

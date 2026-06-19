@@ -13,10 +13,9 @@ if [ -n "${CC_KIT_DIR:-}" ]; then
   if [ -z "$_cc_resolved" ]; then
     echo "cc-kit: WARNING: CC_KIT_DIR=$CC_KIT_DIR is not accessible; falling back to auto-detected ($_cc_auto_root)" >&2
     CC_KIT_DIR="$_cc_auto_root"
-  elif [ "$_cc_resolved" != "$_cc_auto_root" ]; then
-    echo "cc-kit: WARNING: CC_KIT_DIR=$_cc_resolved overrides auto-detected ($_cc_auto_root)" >&2
-    CC_KIT_DIR="$_cc_resolved"
   else
+    # Either matches self-locate or is a valid dev override; both fine.
+    # We don't nag here — see comment in init.sh for the rationale.
     CC_KIT_DIR="$_cc_resolved"
   fi
 else

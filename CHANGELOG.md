@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-06-19
+
+### Fixed
+- **Spurious "overrides auto-detected" warning on every tmux window /
+  new shell**: the same warning was duplicated across 8 bash files
+  (`init.sh`, `bin/cc-switch`, `bin/cc-balance`, `bin/cc-status`,
+  `bin/cc-mode`, `hooks/session-start.sh`, `hooks/stop-record.sh`,
+  `modules/monitor.sh`, `modules/switch.sh`) and fired every time a
+  new shell sourced `init.sh` while `$CC_KIT_ROOT` / `$CC_KIT_DIR`
+  was still set to a dev checkout. The warning was originally added
+  in v0.1.1 to surface a real outage, but it conflated two cases:
+  - **Broken path** (env var → non-existent dir): truly dangerous,
+    silent fallback caused the v0.1.1 SessionStart outage. **Kept.**
+  - **Valid dev override** (env var → real but different dir):
+    intentional and working, but nagged on every shell start. **Removed.**
+  Now: only warn when the env var points to a non-existent path.
+  A valid override is respected silently. `cc-doctor` still surfaces
+  the mismatch via its `env_selflocate` check on demand.
+
+### Added
+- **`tests/init.bats`** (8 tests) covering: silent when unset, silent
+  when matching self-locate, silent for valid dev override (the tmux
+  case), warns on broken path, handles symlinked install dir, plus
+  two regression guards ensuring neither warning can be silently
+  re-added or removed across all 8 source files.
+
+## [0.1.6] - 2026-06-19
+
+### Added
+- **`bin/cc-doctor`** — a dedicated diagnostics command for cc-kit. Runs
+  11 checks and reports each as `OK` / `WARN` / `FAIL`:
+  - **env_override**: stale `CC_KIT_DIR` / `CC_KIT_ROOT` /
+    `MONITOR_DATA_DIR` exports in `~/.bashrc`, `~/.zshrc`, `~/.profile`,
+    `~/.bash_profile` (the same pattern that fixed the v0.1.5 banner
+    bug, now packaged as a one-shot check).
+  - **duplicate_sources**: more than one `source init.sh` or
+    `source provider.env` line in an rc file (the silent duplicate that
+    caused "明明用的是 deepseek" to render as `¥— balance`).
+  - **install_path**: `bin/`, `modules/`, `hooks/`, `init.sh`,
+    `install.sh` all present.
+  - **provider_env**: `data/provider.env` has a non-empty
+    `ANTHROPIC_BASE_URL` and `ANTHROPIC_MODEL` (or explicit
+    `unset ANTHROPIC_BASE_URL` for the Anthropic default).
+  - **key_\<name\>**: `data/secrets.env` contains `DEEPSEEK_API_KEY` /
+    `MINIMAX_API_KEY`; perms are `600`; values are **never** printed
+    in full (only `sk-5****dfd5`-style first-4 / last-4 masks).
+  - **balance_cache**: `.balance_cache` is fresh (under 600 s).
+  - **settings_json**: `~/.claude/settings.json` has `statusLine` +
+    `SessionStart` + `Stop` hooks pointing at any `bin/cc-status` /
+    `hooks/session-start.sh` / `hooks/stop-record.sh` — matches by
+    relative path so a different active install dir is still flagged
+    correctly.
+  - **symlinks**: every `bin/cc-*` is symlinked into `~/.local/bin`
+    (matches install.sh's `.py` strip convention: `cc-dash.py →
+    cc-dash`, `cc-status-full.py → cc-status-full`).
+  - **self_locate**: every bash script that references `$0` or
+    `BASH_SOURCE` uses the `BASH_SOURCE[0]` self-locate pattern.
+    Skips Python files and tiny heredoc stubs that don't need it.
+  - **env_selflocate**: if `$CC_KIT_DIR` is set, it must match the
+    self-located install dir.
+  - **local_bin / path_check**: `~/.local/bin/` exists and is in `$PATH`.
+  Three output modes: human-readable (color, ✓/!/✗/· glyphs), `--json`
+  for scripting, `--fix` to apply two safe auto-fixes (remove stale rc
+  exports via `install.sh`'s `_cc_kit_clean_rc_exports` helper; create
+  missing `~/.local/bin/` symlinks). Exit codes: `0` no FAIL, `1`
+  ≥1 FAIL, `2` bad CLI args. The tool self-locates via `BASH_SOURCE[0]`
+  so it works regardless of what `$CC_KIT_DIR` is set to in the env.
+- **`tests/doctor.bats`** (14 new tests) covering: self-locate from
+  any cwd, `--help` / unknown-arg exit codes, detection of each
+  override var, `--fix` actually mutates the rc file, JSON output
+  is parseable with the required keys, API key values never appear
+  in any output (regression guard against the leak vector).
+
 ## [0.1.5] - 2026-06-19
 
 ### Changed
@@ -200,7 +273,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Balance query: DeepSeek account, MiniMax coding-plan quota
 - SessionStart / Stop hooks
 
-[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/Huadous/cc-kit/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.7
+[0.1.6]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.6
 [0.1.5]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.5
 [0.1.4]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.4
 [0.1.3]: https://github.com/Huadous/cc-kit/releases/tag/v0.1.3

@@ -1,0 +1,451 @@
+#!/usr/bin/env bash
+# cc-doctor — Diagnose cc-kit configuration drift, broken installs,
+# env-var overrides, and Claude Code integration issues.
+#
+# cc-kit is supposed to be install-and-forget, but ~/.bashrc overrides,
+# partial reinstalls, leftover files from old CC_KIT_ROOT values, and
+# duplicate source calls can quietly break things (wrong provider.env,
+# broken hooks, "no such file" SessionStart errors). This tool surfaces
+# all of those in one report so the user doesn't have to grep for hours.
+#
+# Usage:
+#   cc-doctor           # human-readable report
+#   cc-doctor --json    # machine-readable JSON (for scripting)
+#   cc-doctor --fix     # apply the safe auto-fixes
+#   cc-doctor --help
+#
+# Exit codes:
+#   0  all checks OK (or only INFO / WARN)
+#   1  at least one FAIL
+#
+# Important: this script is read-only by default. --fix only touches the
+# rc files (removing stale CC_KIT_* exports) and creates missing
+# symlinks in ~/.local/bin — never edits secrets.env, provider.env,
+# settings.json, or anything else the user would have to recover by hand.
+
+set -eu
+[ -n "${BASH_VERSION:-}" ] && set -o pipefail
+
+# Self-locate. We don't trust $CC_KIT_DIR (that's the whole point of
+# this tool — diagnose when it's wrong). We do trust BASH_SOURCE
+# because it points at the actual file on disk.
+_cc_self="${BASH_SOURCE[0]:-$0}"
+while [ -L "$_cc_self" ]; do _cc_self="$(readlink -f "$_cc_self")"; done
+CC_KIT_DIR="$(cd "$(dirname "$_cc_self")/.." && pwd)"
+unset _cc_self
+# Use the install dir we found, NOT the env var. If the env var points
+# elsewhere, that's a finding we'll report.
+ENVDIR="${CC_KIT_DIR_ENV:-${CC_KIT_DIR:-}}"
+ENVDIR="${ENVDIR:-}"
+
+# ── Color (only when stdout is a TTY) ──────────────────────────────────
+if [ -t 1 ]; then
+  RED='\033[31m'; GRN='\033[32m'; YLW='\033[33m'; DIM='\033[2m'; BLD='\033[1m'; RST='\033[0m'
+else
+  RED=''; GRN=''; YLW=''; DIM=''; BLD=''; RST=''
+fi
+
+# ── CLI args ──────────────────────────────────────────────────────────
+JSON_OUT=0
+AUTO_FIX=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json) JSON_OUT=1 ;;
+    --fix)  AUTO_FIX=1 ;;
+    -h|--help)
+      cat <<'EOF'
+cc-doctor — diagnose cc-kit configuration
+
+Usage:
+  cc-doctor           Human-readable report (default)
+  cc-doctor --json    Machine-readable JSON output
+  cc-doctor --fix     Apply safe auto-fixes (stale exports, missing symlinks)
+
+Exit codes:
+  0  no FAIL findings
+  1  one or more FAIL findings
+
+This tool is read-only by default. --fix only touches:
+  - ~/.bashrc, ~/.zshrc (remove stale CC_KIT_* exports)
+  - ~/.local/bin/  (create missing cc-* symlinks)
+It never edits secrets.env, provider.env, or settings.json.
+EOF
+      exit 0 ;;
+    *) echo "cc-doctor: unknown option: $1 (try --help)" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# ── Result collection ─────────────────────────────────────────────────
+# Each finding: "LEVEL|check_name|message". We accumulate, then render.
+RESULTS=()
+FAIL_COUNT=0
+WARN_COUNT=0
+OK_COUNT=0
+FIXED=()
+
+result() {
+  local level="$1" name="$2" msg="$3"
+  RESULTS+=("$level|$name|$msg")
+  case "$level" in
+    FAIL) FAIL_COUNT=$((FAIL_COUNT+1)) ;;
+    WARN) WARN_COUNT=$((WARN_COUNT+1)) ;;
+    OK)   OK_COUNT=$((OK_COUNT+1))   ;;
+  esac
+}
+
+# ── CHECKS ─────────────────────────────────────────────────────────────
+
+# 1. Env-var overrides in shell rc files
+check_env_overrides() {
+  local found=0
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile" "${ZDOTDIR:-$HOME}/.zshrc" "${ZDOTDIR:-$HOME}/.zprofile"; do
+    [[ -f "$rc" ]] || continue
+    local hits
+    hits=$(grep -nE '^[^#]*\<export[[:space:]]+(CC_KIT_DIR|CC_KIT_ROOT|MONITOR_DATA_DIR)=' "$rc" 2>/dev/null || true)
+    if [[ -n "$hits" ]]; then
+      found=1
+      if [[ "$AUTO_FIX" -eq 1 ]]; then
+        # Use install.sh's helper if present, else inline
+        local helper="$CC_KIT_DIR/install.sh"
+        if [[ -f "$helper" ]]; then
+          # shellcheck disable=SC1090
+          source <(awk '/^_cc_kit_clean_rc_exports\(\) \{$/,/^}$/' "$helper")
+          if _cc_kit_clean_rc_exports "$rc" 1; then
+            FIXED+=("removed stale CC_KIT_* exports from $rc")
+          fi
+        fi
+      else
+        # Truncate to first 3 lines for readability
+        local preview
+        preview=$(echo "$hits" | head -3 | sed 's/^/      /')
+        result FAIL "env_override" "stale CC_KIT_* export(s) in $rc:
+$preview
+      hint: re-run install.sh, or: cc-doctor --fix"
+      fi
+    fi
+  done
+  if [[ "$found" -eq 0 ]]; then
+    result OK "env_override" "no stale CC_KIT_* / MONITOR_DATA_DIR exports in rc files"
+  fi
+  # Explicit return 0: the function's last command (the [[ ]] test above)
+  # would otherwise return the failure code if found=1, which combined
+  # with `set -e` would kill the caller.
+  return 0
+}
+
+# 2. Duplicate init.sh / provider.env source calls in rc files
+check_duplicate_sources() {
+for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile"; do
+    [[ -f "$rc" ]] || continue
+    # Count source calls. We must guard against `grep -c` exiting 1 (no
+    # match) — that exit propagates through `set -e` and kills the script
+    # before the assignment finishes. `|| n=0` swallows that exit while
+    # leaving n unset if grep had no output, then the ${n:-0} default
+    # catches that. Previous `grep -c || echo 0` produced a multi-line
+    # "0\n0" value that broke `[[ ... -gt ... ]]` arithmetic comparisons.
+    local n
+    n=$(grep -cE '\bsource\b.*init\.sh' "$rc" 2>/dev/null) || n=0
+    n=${n:-0}
+    if [[ "$n" -gt 1 ]]; then
+      result WARN "duplicate_init_source" "$rc has $n source calls for init.sh (expect 1):
+$(grep -nE '\bsource\b.*init\.sh' "$rc" | sed 's/^/      /')"
+    fi
+    local m
+    m=$(grep -cE '\bsource\b.*provider\.env' "$rc" 2>/dev/null) || m=0
+    m=${m:-0}
+    if [[ "$m" -gt 1 ]]; then
+      result WARN "duplicate_provider_source" "$rc has $m source calls for provider.env (expect 1):
+$(grep -nE '\bsource\b.*provider\.env' "$rc" | sed 's/^/      /')"
+    fi
+  done
+  result OK "duplicate_sources" "no duplicate init.sh / provider.env source calls in rc files"
+}
+
+# 3. Install path integrity
+check_install_path() {
+  local missing=()
+  for sub in bin modules hooks; do
+    [[ -d "$CC_KIT_DIR/$sub" ]] || missing+=("$sub/")
+  done
+  for f in init.sh install.sh; do
+    [[ -f "$CC_KIT_DIR/$f" ]] || missing+=("$f")
+  done
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    result FAIL "install_path" "install dir $CC_KIT_DIR is incomplete; missing: ${missing[*]}"
+  else
+    result OK "install_path" "$CC_KIT_DIR has bin/ modules/ hooks/ + install.sh + init.sh"
+  fi
+}
+
+# 4. provider.env validity
+check_provider_env() {
+  local f="$CC_KIT_DIR/data/provider.env"
+  if [[ ! -f "$f" ]]; then
+    result FAIL "provider_env" "$f missing; run: cc-switch <provider>"
+    return
+  fi
+  local base_url model
+  base_url=$(grep -E '^export ANTHROPIC_BASE_URL=' "$f" 2>/dev/null | tail -1 | sed 's/^export ANTHROPIC_BASE_URL=//' | tr -d '"' || echo "")
+  model=$(grep -E '^export ANTHROPIC_MODEL=' "$f" 2>/dev/null | tail -1 | sed 's/^export ANTHROPIC_MODEL=//' | tr -d '"' || echo "")
+  if [[ -z "$base_url" && -z "$model" ]]; then
+    # Could be the anthropic default (no BASE_URL → uses api.anthropic.com)
+    if grep -qE '^unset ANTHROPIC_BASE_URL' "$f"; then
+      result OK "provider_env" "anthropic default (no override); model=${model:-claude-*}"
+    else
+      result WARN "provider_env" "provider.env has no ANTHROPIC_BASE_URL or ANTHROPIC_MODEL set"
+    fi
+  else
+    result OK "provider_env" "BASE_URL=${base_url:-(default)}  MODEL=$model"
+  fi
+}
+
+# 5. API key presence (never prints the key)
+check_api_keys() {
+  local f="$CC_KIT_DIR/data/secrets.env"
+  if [[ ! -f "$f" ]]; then
+    result WARN "secrets_file" "secrets.env missing; no saved API keys (you'll be prompted on each switch)"
+    return
+  fi
+  local perms
+  perms=$(stat -c '%a' "$f" 2>/dev/null || stat -f '%Lp' "$f" 2>/dev/null || echo "")
+  if [[ -n "$perms" && "$perms" != "600" ]]; then
+    result WARN "secrets_perms" "secrets.env has perms $perms (expect 600); chmod 600 $f"
+  fi
+  for k in DEEPSEEK_API_KEY MINIMAX_API_KEY; do
+    local v
+    v=$(grep -E "^export $k=" "$f" 2>/dev/null | tail -1 | sed "s/^export $k=//" | tr -d '"' || echo "")
+    if [[ -n "$v" ]]; then
+      # Show masked value
+      local masked
+      if [[ ${#v} -le 8 ]]; then masked="****"; else masked="${v:0:4}****${v: -4}"; fi
+      result OK "key_$k" "$k is set ($masked)"
+    else
+      result INFO "key_$k" "$k not set"
+    fi
+  done
+}
+
+# 6. Balance cache freshness
+check_balance_cache() {
+  local f="$CC_KIT_DIR/data/.balance_cache"
+  if [[ ! -f "$f" ]]; then
+    result INFO "balance_cache" "no cache yet; will populate on next !cc-balance"
+    return
+  fi
+  local mtime now age
+  now=$(date +%s)
+  mtime=$(date -r "$f" +%s 2>/dev/null || echo 0)
+  age=$(( now - mtime ))
+  if [[ "$age" -lt 600 ]]; then
+    result OK "balance_cache" "fresh (${age}s old, TTL 600s)"
+  else
+    result WARN "balance_cache" "stale (${age}s old, TTL 600s); run: !cc-balance to refresh"
+  fi
+}
+
+# 7. Claude Code settings.json integration
+check_claude_settings() {
+  local sf="$HOME/.claude/settings.json"
+  if [[ ! -f "$sf" ]]; then
+    result FAIL "settings_json" "$sf missing; cc-kit hooks/statusLine not installed"
+    return
+  fi
+  # Match by relative path fragment (bin/cc-status, hooks/session-start.sh)
+  # rather than full path — the install dir in settings.json might not be
+  # the same as our self-located $CC_KIT_DIR (the user might have a different
+  # active install for testing).
+  local has_status has_session has_stop
+  has_status=$(grep -cE 'bin/cc-status[^/]*' "$sf" 2>/dev/null) || has_status=0
+  has_session=$(grep -c "session-start.sh" "$sf" 2>/dev/null) || has_session=0
+  has_stop=$(grep -c "stop-record.sh" "$sf" 2>/dev/null) || has_stop=0
+  has_status=${has_status:-0}; has_session=${has_session:-0}; has_stop=${has_stop:-0}
+  if [[ "$has_status" -ge 1 && "$has_session" -ge 1 && "$has_stop" -ge 1 ]]; then
+    result OK "settings_json" "statusLine + SessionStart + Stop hooks all present"
+  else
+    local miss=()
+    [[ "$has_status"  -lt 1 ]] && miss+=("statusLine")
+    [[ "$has_session" -lt 1 ]] && miss+=("SessionStart")
+    [[ "$has_stop"    -lt 1 ]] && miss+=("Stop")
+    result FAIL "settings_json" "missing hooks in $sf: ${miss[*]}; run: cc-kit/install.sh"
+  fi
+}
+
+# 8. ~/.local/bin symlinks
+check_symlinks() {
+  local lb="$HOME/.local/bin"
+  [[ -d "$lb" ]] || { result WARN "local_bin" "$lb does not exist; PATH not extended by install.sh"; return; }
+  # Also check PATH includes it
+  if ! echo "$PATH" | tr ':' '\n' | grep -qx "$lb"; then
+    result WARN "path_check" "$lb is not in PATH; cc-* commands won't resolve directly"
+  fi
+  # install.sh strips .py from the symlink name (cc-dash.py → cc-dash,
+  # cc-status-full.py → cc-status-full), so we must match that convention
+  # here too — checking for the source-file name gives false positives.
+  local missing=()
+  for src in "$CC_KIT_DIR"/bin/cc-*; do
+    [[ -f "$src" ]] || continue
+    local name link
+    name=$(basename "${src%.py}")   # strip .py to match install.sh
+    link="$lb/$name"
+    if [[ ! -L "$link" ]]; then
+      missing+=("$name")
+      if [[ "$AUTO_FIX" -eq 1 ]]; then
+        ln -sf "$src" "$link"
+        FIXED+=("created symlink: $link → $src")
+      fi
+    fi
+  done
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    if [[ "$AUTO_FIX" -eq 1 ]]; then
+      result OK "symlinks" "fixed ${#missing[@]} missing symlinks in $lb"
+    else
+      result WARN "symlinks" "missing symlinks in $lb: ${missing[*]}
+      hint: cc-doctor --fix, or: re-run install.sh"
+    fi
+  else
+    result OK "symlinks" "all bin/cc-* symlinks present in $lb"
+  fi
+}
+
+# 9. Self-locate pattern in bash scripts that need install-dir awareness.
+# Skip Python files (no BASH_SOURCE), tiny heredoc stubs (no path refs),
+# and any bash script that doesn't reference its own path via $0.
+check_self_locate_pattern() {
+  local missing=()
+  local checked=0
+  for f in "$CC_KIT_DIR"/bin/* "$CC_KIT_DIR"/modules/*.sh "$CC_KIT_DIR"/hooks/*.sh "$CC_KIT_DIR/init.sh"; do
+    [[ -f "$f" ]] || continue
+    case "$f" in
+      *.py) continue ;;                 # Python: no BASH_SOURCE expected
+    esac
+    # Only bash scripts that reference $0 (their own path) need self-locate.
+    # Heredoc stubs like cc-help don't need it.
+    if ! head -1 "$f" 2>/dev/null | grep -qE '^#!.*bash'; then
+      continue
+    fi
+    # shellcheck disable=SC2016  # literal $0/BASH_SOURCE is the intent
+    if ! grep -q '\$0\|BASH_SOURCE' "$f"; then
+      continue  # script doesn't care about its own path
+    fi
+    checked=$((checked + 1))
+    if ! grep -q 'BASH_SOURCE\[0\]' "$f"; then
+      missing+=("${f#"$CC_KIT_DIR"/}")
+    fi
+  done
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    result FAIL "self_locate" "$checked bash script(s) reference \$0 but lack the self-locate pattern: ${missing[*]}"
+  else
+    result OK "self_locate" "all $checked path-aware bash scripts use BASH_SOURCE[0]"
+  fi
+}
+
+# 10. Cross-check: does the env var (if set) point where self-locate finds us?
+check_env_vs_selflocate() {
+  [[ -z "$ENVDIR" ]] && { result OK "env_selflocate" "no CC_KIT_DIR env override; using self-located $CC_KIT_DIR"; return; }
+  if [[ "$ENVDIR" != "$CC_KIT_DIR" ]]; then
+    result WARN "env_selflocate" "CC_KIT_DIR env=$ENVDIR but self-located=$CC_KIT_DIR (mismatch)
+      hint: unset CC_KIT_DIR or fix the env to match the install"
+  else
+    result OK "env_selflocate" "CC_KIT_DIR env matches self-located $CC_KIT_DIR"
+  fi
+}
+
+# ── Render ─────────────────────────────────────────────────────────────
+
+render_human() {
+  local name
+  printf '%b%scc-kit doctor%s\n' "$BLD" "" "$RST"
+  printf '  install: %s\n' "$CC_KIT_DIR"
+  printf '  results: %b%d OK%s  %b%d WARN%s  %b%d FAIL%s\n\n' \
+    "$GRN" "$OK_COUNT" "$RST" \
+    "$YLW" "$WARN_COUNT" "$RST" \
+    "$RED" "$FAIL_COUNT" "$RST"
+
+  local last_check=""
+  for r in "${RESULTS[@]}"; do
+    local level="${r%%|*}" rest="${r#*|}"
+    local cname="${rest%%|*}" msg="${rest#*|}"
+    if [[ "$cname" != "$last_check" ]]; then
+      last_check="$cname"
+    fi
+    case "$level" in
+      OK)   printf '  %b✓%b %b%-22s%s  %s\n' "$GRN" "$RST" "$DIM" "$cname" "$RST" "$msg" ;;
+      WARN) printf '  %b!%b %b%-22s%s  %s\n' "$YLW" "$RST" "$BLD"  "$cname" "$RST" "$msg" ;;
+      FAIL) printf '  %b✗%b %b%-22s%s  %s\n' "$RED" "$RST" "$BLD"  "$cname" "$RST" "$msg" ;;
+      INFO) printf '  %b·%b %b%-22s%s  %s\n' "$DIM" "$RST" "$DIM"  "$cname" "$RST" "$msg" ;;
+    esac
+  done
+
+  if [[ "${#FIXED[@]}" -gt 0 ]]; then
+    printf '\n%bAuto-fixed:%b\n' "$GRN" "$RST"
+    printf '  %s\n' "${FIXED[@]}"
+  fi
+
+  if [[ "$FAIL_COUNT" -gt 0 ]]; then
+    printf '\n%b%s%d issue(s) need attention.%s  Re-run install.sh or fix the items above.\n' \
+      "$RED" "$BLD" "$FAIL_COUNT" "$RST"
+  elif [[ "$WARN_COUNT" -gt 0 ]]; then
+    printf '\n%bNo failures, %d warning(s).%s Run cc-doctor --fix for safe auto-repair.\n' \
+      "$YLW" "$WARN_COUNT" "$RST"
+  else
+    printf '\n%ball clear.%s\n' "$GRN" "$RST"
+  fi
+}
+
+render_json() {
+  printf '{\n'
+  printf '  "install_dir": %s,\n' "$(json_str "$CC_KIT_DIR")"
+  printf '  "summary": {"ok": %d, "warn": %d, "fail": %d},\n' "$OK_COUNT" "$WARN_COUNT" "$FAIL_COUNT"
+  printf '  "findings": [\n'
+  local first=1
+  for r in "${RESULTS[@]}"; do
+    local level="${r%%|*}" rest="${r#*|}"
+    local cname="${rest%%|*}" msg="${rest#*|}"
+    [[ "$first" -eq 0 ]] && printf ',\n'
+    first=0
+    printf '    {"level": %s, "check": %s, "message": %s}' \
+      "$(json_str "$level")" "$(json_str "$cname")" "$(json_str "${msg//$'\n'/ }")"
+  done
+  printf '\n  ],\n'
+  printf '  "fixed": ['
+  local first=1
+  for f in "${FIXED[@]}"; do
+    [[ "$first" -eq 0 ]] && printf ', '
+    first=0
+    printf '%s' "$(json_str "$f")"
+  done
+  printf ']\n}\n'
+}
+
+# Minimal JSON string escape: backslash, quote, control chars, tabs/newlines.
+json_str() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//	/\\t}"
+  s="${s//$'\n'/ }"
+  s="${s//$'\r'/}"
+  printf '"%s"' "$s"
+}
+
+# ── Run ────────────────────────────────────────────────────────────────
+
+check_env_overrides
+check_duplicate_sources
+check_install_path
+check_provider_env
+check_api_keys
+check_balance_cache
+check_claude_settings
+check_symlinks
+check_self_locate_pattern
+check_env_vs_selflocate
+
+if [[ "$JSON_OUT" -eq 1 ]]; then
+  render_json
+else
+  render_human
+fi
+
+[[ "$FAIL_COUNT" -gt 0 ]] && exit 1 || exit 0
