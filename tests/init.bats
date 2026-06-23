@@ -89,6 +89,25 @@ setup() {
     grep -q "is not accessible" "$REAL_INIT"
 }
 
+@test "init.sh: cc-switch is replaced with a thin dispatcher" {
+    # After sourcing init.sh, cc-switch must be a function (not the
+    # full modules/switch.sh body). The full body is large and freezes
+    # at first-source — a long-lived tmux pane would keep the old body
+    # after an upgrade (e.g. adding glm-5.2). The dispatcher re-runs
+    # via bin/cc-switch, which re-sources modules/switch.sh every call.
+    #
+    # We verify by checking that the body is short (a few lines — just
+    # the call to bin/cc-switch) rather than the full multi-case logic.
+    run bash -c "source '$REAL_INIT' >/dev/null 2>&1; declare -f cc-switch"
+    [[ "$status" -eq 0 ]]
+    # Body should be small — dispatcher is ~3 lines, full body is 100+
+    line_count=$(echo "$output" | wc -l)
+    [[ "$line_count" -lt 15 ]]
+    # And must reference the bin path (via CC_KIT_ROOT, the env var the script exports)
+    [[ "$output" == *'CC_KIT_ROOT'* ]]
+    [[ "$output" == *'bin/cc-switch'* ]]
+}
+
 @test "all source files: no script contains the 'overrides auto-detected' warning" {
     # The same dev-override warning was duplicated across 8 bash files
     # (init.sh, bin/cc-switch, bin/cc-balance, bin/cc-status, bin/cc-mode,

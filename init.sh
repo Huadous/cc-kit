@@ -52,3 +52,19 @@ if [[ -f "$CC_KIT_ROOT/completions/cc.bash" ]]; then
   # shellcheck disable=SC1090
   source "$CC_KIT_ROOT/completions/cc.bash"
 fi
+
+# Replace cc-switch function with a thin dispatcher that always re-runs via
+# the standalone bin/cc-switch script. The script re-sources modules/switch.sh
+# on every invocation, so it always picks up the latest parser (e.g. when a
+# new model like glm-5.2 is added). Without this, a long-lived tmux pane
+# keeps using whatever modules/switch.sh looked like when the shell first
+# started — functions shadow PATH binaries, so upgrades look "broken" until
+# the user manually reloads the shell. See modules/switch.sh for details.
+# We reference $CC_KIT_ROOT directly (late binding) rather than caching the
+# bin path in a local — caching + unset caused the late call to expand an
+# empty string and fail with `: command not found`.
+if [[ -x "$CC_KIT_ROOT/bin/cc-switch" ]]; then
+  cc-switch() {
+    "$CC_KIT_ROOT/bin/cc-switch" "$@"
+  }
+fi
