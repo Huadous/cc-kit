@@ -105,7 +105,6 @@ if bal:
 # Check if the current provider has an API key (affects balance fallback text).
 def _has_api_key():
     """Return True if the current provider's API key is set."""
-    provider_env = os.path.join(CC_KIT, "data", "provider.env")
     secrets_env = os.path.join(CC_KIT, "data", "secrets.env")
     base_url = os.getenv("ANTHROPIC_BASE_URL", "")
     # ANTHROPIC_AUTH_TOKEN set directly in env
