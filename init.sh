@@ -31,6 +31,12 @@ if [ -n "${CC_KIT_ROOT:-}" ]; then
 else
   export CC_KIT_ROOT="$_cc_auto_root"
 fi
+# Export CC_KIT_DIR so internal scripts (cc-status, cc-balance, etc.)
+# use the same root as cc-switch. Without this, scripts may self-locate
+# to a different install dir than where CC_KIT_ROOT points — e.g.
+# cc-switch writes provider.env to the dev tree but cc-status reads
+# from the install copy, so the status bar shows a stale provider.
+export CC_KIT_DIR="$CC_KIT_ROOT"
 unset _cc_self _cc_self_dir _cc_auto_root _cc_resolved
 
 # Load module functions
