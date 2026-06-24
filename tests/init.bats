@@ -89,23 +89,57 @@ setup() {
     grep -q "is not accessible" "$REAL_INIT"
 }
 
-@test "init.sh: cc-switch is replaced with a thin dispatcher" {
-    # After sourcing init.sh, cc-switch must be a function (not the
-    # full modules/switch.sh body). The full body is large and freezes
-    # at first-source — a long-lived tmux pane would keep the old body
-    # after an upgrade (e.g. adding glm-5.2). The dispatcher re-runs
-    # via bin/cc-switch, which re-sources modules/switch.sh every call.
+@test "init.sh: cc-switch is wrapped with an in-process re-source dispatcher" {
+    # After sourcing init.sh, cc-switch must be a thin wrapper that re-sources
+    # modules/switch.sh on every call (so the parser stays fresh after an
+    # upgrade) and then calls the real body IN-PROCESS. In-process matters:
+    # the real body ends by sourcing ~/.bashrc, which applies the new provider
+    # env to the calling shell — that's how the switch takes effect.
     #
-    # We verify by checking that the body is short (a few lines — just
-    # the call to bin/cc-switch) rather than the full multi-case logic.
+    # A subprocess wrapper (bin/cc-switch) would write provider.env but could
+    # NOT mutate the caller's env, so the switch silently wouldn't take effect.
+    # This test guards against regressing back to a subprocess wrapper.
     run bash -c "source '$REAL_INIT' >/dev/null 2>&1; declare -f cc-switch"
     [[ "$status" -eq 0 ]]
-    # Body should be small — dispatcher is ~3 lines, full body is 100+
+    # Wrapper body is small (~10 lines), the real body is 100+.
     line_count=$(echo "$output" | wc -l)
-    [[ "$line_count" -lt 15 ]]
-    # And must reference the bin path (via CC_KIT_ROOT, the env var the script exports)
-    [[ "$output" == *'CC_KIT_ROOT'* ]]
-    [[ "$output" == *'bin/cc-switch'* ]]
+    [[ "$line_count" -lt 20 ]]
+    # Must re-source the module in-process (NOT exec a subprocess binary).
+    [[ "$output" == *'source'* ]]
+    [[ "$output" == *'modules/switch.sh'* ]]
+    [[ "$output" != *'bin/cc-switch'* ]]
+}
+
+@test "init.sh: cc-switch applies the new provider env to the CALLING shell" {
+    # Regression test for the v0.1.15 subprocess-dispatcher bug: cc-switch
+    # wrote provider.env correctly but ran in a subprocess, so its trailing
+    # `source ~/.bashrc` never reached the caller's env — the switch "didn't
+    # take effect" until the user manually re-exported vars. The in-process
+    # wrapper must update the caller's ANTHROPIC_MODEL.
+    #
+    # We run against the REAL init.sh + modules/switch.sh, but redirect
+    # CC_KIT_ROOT, BASHRC_FILE and the data dir into a temp tree so we don't
+    # clobber the developer's real provider.env / secrets.
+    local tmp
+    tmp="$(mktemp -d)"
+    cp -r "$BATS_TEST_DIRNAME/../bin" "$tmp/"
+    cp -r "$BATS_TEST_DIRNAME/../modules" "$tmp/"
+    cp "$REAL_INIT" "$tmp/"
+    mkdir -p "$tmp/data"
+    printf 'export GLM_API_KEY="sk-test-1234567890"\n' > "$tmp/data/secrets.env"
+
+    run bash -c "
+        export CC_KIT_ROOT='$tmp'
+        export BASHRC_FILE='$tmp/.bashrc'
+        source '$tmp/init.sh' >/dev/null 2>&1
+        export ANTHROPIC_MODEL='OLD-MODEL'
+        cc-switch glm 5.2 </dev/null >/dev/null 2>&1
+        echo \"AFTER=\$ANTHROPIC_MODEL\"
+    "
+    rm -rf "$tmp"
+    [[ "$status" -eq 0 ]]
+    # The caller's env must reflect the new provider, not stay 'OLD-MODEL'.
+    [[ "$output" == *"AFTER=glm-5.2"* ]]
 }
 
 @test "all source files: no script contains the 'overrides auto-detected' warning" {

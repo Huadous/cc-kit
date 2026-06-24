@@ -53,18 +53,31 @@ if [[ -f "$CC_KIT_ROOT/completions/cc.bash" ]]; then
   source "$CC_KIT_ROOT/completions/cc.bash"
 fi
 
-# Replace cc-switch function with a thin dispatcher that always re-runs via
-# the standalone bin/cc-switch script. The script re-sources modules/switch.sh
-# on every invocation, so it always picks up the latest parser (e.g. when a
-# new model like glm-5.2 is added). Without this, a long-lived tmux pane
-# keeps using whatever modules/switch.sh looked like when the shell first
-# started — functions shadow PATH binaries, so upgrades look "broken" until
-# the user manually reloads the shell. See modules/switch.sh for details.
-# We reference $CC_KIT_ROOT directly (late binding) rather than caching the
-# bin path in a local — caching + unset caused the late call to expand an
-# empty string and fail with `: command not found`.
-if [[ -x "$CC_KIT_ROOT/bin/cc-switch" ]]; then
+# Wrap cc-switch so every call re-sources modules/switch.sh first. This keeps
+# the parser fresh: after an upgrade that adds a model (e.g. glm-5.2), a
+# long-lived tmux pane picks up the new parser on the next call instead of
+# staying frozen at whatever switch.sh looked like when the shell first started.
+#
+# CRITICAL: the wrapper must run IN-PROCESS (source + call), NOT via a
+# subprocess (bin/cc-switch). switch.sh's real cc-switch ends by sourcing
+# ~/.bashrc, which re-sources data/provider.env and applies the new provider
+# env vars (ANTHROPIC_MODEL, etc.) to THIS shell. That in-process update is
+# how the switch actually takes effect for the next `claude` launch. A
+# subprocess wrapper would write provider.env correctly but leave this shell's
+# env stale — so `cc-switch glm 5.2` would silently "not take effect".
+#
+# The depth guard prevents infinite recursion if switch.sh is missing or
+# malformed and fails to redefine cc-switch: `source ... || return` covers a
+# missing/unreadable file; the guard covers a file that sources cleanly but
+# doesn't (re)define cc-switch.
+if [[ -f "$CC_KIT_ROOT/modules/switch.sh" ]]; then
   cc-switch() {
-    "$CC_KIT_ROOT/bin/cc-switch" "$@"
+    if [[ "${_CC_SWITCH_DEPTH:-0}" -gt 0 ]]; then
+      echo "cc-switch: failed to load $CC_KIT_ROOT/modules/switch.sh" >&2
+      return 1
+    fi
+    # shellcheck disable=SC1090
+    source "$CC_KIT_ROOT/modules/switch.sh" || return 1
+    _CC_SWITCH_DEPTH=1 cc-switch "$@"
   }
 fi
