@@ -142,6 +142,43 @@ setup() {
     [[ "$output" == *"AFTER=glm-5.2"* ]]
 }
 
+@test "init.sh: dispatcher applies env even with guarded bashrc" {
+    # Same regression as the switch.bats guarded-bashrc test, but exercising
+    # the full pipeline through init.sh's dispatcher. The dispatcher has its
+    # own safety-net `source provider.env` after cc-switch returns, and the
+    # real body also sources $CONFIG_FILE directly after $BASHRC_FILE. Both
+    # layers must protect against the bashrc interactivity guard.
+    local tmp
+    tmp="$(mktemp -d)"
+    cp -r "$BATS_TEST_DIRNAME/../bin" "$tmp/"
+    cp -r "$BATS_TEST_DIRNAME/../modules" "$tmp/"
+    cp "$REAL_INIT" "$tmp/"
+    mkdir -p "$tmp/data"
+    printf 'export DEEPSEEK_API_KEY="sk-test-1234567890"\n' > "$tmp/data/secrets.env"
+
+    # Create a guarded bashrc (mimicking Ubuntu's default .bashrc)
+    cat > "$tmp/.bashrc" <<'GUARD_EOF'
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+echo "SHOULD_NOT_BE_PRINTED" >&2
+GUARD_EOF
+
+    run bash -c "
+        export CC_KIT_ROOT='$tmp'
+        export BASHRC_FILE='$tmp/.bashrc'
+        source '$tmp/init.sh' >/dev/null 2>&1
+        export ANTHROPIC_MODEL='OLD-MODEL'
+        cc-switch deepseek pro </dev/null >/dev/null 2>&1
+        echo \"AFTER=\$ANTHROPIC_MODEL\"
+    "
+    rm -rf "$tmp"
+    [[ "$status" -eq 0 ]]
+    # The caller's env MUST reflect the new provider.
+    [[ "$output" == *"AFTER=deepseek-v4-pro"* ]]
+}
+
 @test "all source files: no script contains the 'overrides auto-detected' warning" {
     # The same dev-override warning was duplicated across 8 bash files
     # (init.sh, bin/cc-switch, bin/cc-balance, bin/cc-status, bin/cc-mode,

@@ -166,3 +166,37 @@ teardown() {
     [[ "$output" == *"MINIMAX_API_KEY"* ]]
     [[ "$output" == *"real terminal"* ]]
 }
+
+@test "cc-switch applies env to caller even when bashrc has interactivity guard" {
+    # Regression: Ubuntu's default .bashrc has an interactivity guard:
+    #   case $- in *i*) ;; *) return;;
+    # When cc-switch runs non-interactively (Claude Code `! cc-switch`,
+    # `bash -c 'cc-switch ...'`, etc.), `source ~/.bashrc` hits this guard
+    # and returns before reaching the cc-kit block that sources provider.env.
+    # The old code relied solely on source-bashrc — env vars were silently
+    # NOT updated, so the switch "didn't take effect" despite "✓ Switched".
+    #
+    # Fix: switch.sh now also sources $CONFIG_FILE directly, bypassing the
+    # bashrc guard entirely. Env is always applied regardless of $-.
+    save_secret "deepseek" "sk-test-1234567890"
+
+    # Create a guarded bashrc (mimicking Ubuntu's default)
+    cat > "$BASHRC_FILE" <<'GUARD_EOF'
+# ~/.bashrc — with interactivity guard
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+# Everything below the guard is never reached in non-interactive bash
+echo "SHOULD_NOT_BE_PRINTED" >&2
+GUARD_EOF
+
+    # Set old env, run cc-switch, verify the CALLER's env changed
+    export ANTHROPIC_MODEL="OLD-MODEL"
+    export ANTHROPIC_BASE_URL="OLD-URL"
+
+    cc-switch deepseek pro </dev/null >/dev/null 2>&1
+
+    [[ "$ANTHROPIC_MODEL" == deepseek-v4-pro* ]]
+    [[ "$ANTHROPIC_BASE_URL" == "https://api.deepseek.com/anthropic" ]]
+}

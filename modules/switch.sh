@@ -412,9 +412,18 @@ EOF
       ;;
   esac
 
-  # Auto-source bashrc to apply changes immediately
+# Apply the new provider env to this shell. We source bashrc first
+# (which re-sources init.sh → provider.env, and redefines cc-switch
+# back to the fresh-parser dispatcher). Then we source provider.env
+# directly as a safety net: bashrc may have an interactivity guard
+# (`[ -z "$PS1" ] && return` or `case $- in *i*) ;; *) return;;`)
+# that blocks the rest of bashrc in non-interactive shells, so the
+# direct source guarantees the env is always applied.
   if [[ -f "$BASHRC_FILE" ]]; then
-    source "$BASHRC_FILE"
+    source "$BASHRC_FILE" 2>/dev/null || true
+  fi
+  if [[ -f "$CONFIG_FILE" ]]; then
+    source "$CONFIG_FILE"
   fi
 }
 

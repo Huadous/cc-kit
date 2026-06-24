@@ -79,5 +79,12 @@ if [[ -f "$CC_KIT_ROOT/modules/switch.sh" ]]; then
     # shellcheck disable=SC1090
     source "$CC_KIT_ROOT/modules/switch.sh" || return 1
     _CC_SWITCH_DEPTH=1 cc-switch "$@"
+    local _rc=$?
+    # Safety net: the real body sources ~/.bashrc to apply the new provider
+    # env, but .bashrc's interactivity guard may block it in non-interactive
+    # shells (common on Ubuntu). Re-apply provider.env directly to guarantee
+    # the env vars reach this shell regardless of context.
+    [[ -f "$CC_KIT_ROOT/data/provider.env" ]] && source "$CC_KIT_ROOT/data/provider.env"
+    return $_rc
   }
 fi
